@@ -6,7 +6,8 @@ function Settings() {
     GROQ_API_KEY: '',
     temperature: 0.7,
     top_p: 0.95,
-    mcpServers: {}
+    mcpServers: {},
+    systemMessage: null
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -434,6 +435,24 @@ function Settings() {
                 )}
               </button>
             </div>
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="system-message" className="block text-sm font-medium text-gray-300 mb-2">
+              System Message
+            </label>
+            <textarea
+              id="system-message"
+              name="systemMessage"
+              value={settings.systemMessage || ''}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-transparent text-white placeholder-gray-400"
+              placeholder="Enter a system message to guide the AI's behavior"
+              rows={4}
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              This message will be used to set the initial behavior of the AI. Leave empty to use the default.
+            </p>
           </div>
 
           <h3 className="text-lg font-medium mt-6 mb-3 text-white">Generation Parameters</h3>

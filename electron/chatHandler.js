@@ -1,6 +1,8 @@
 const Groq = require('groq-sdk');
 const { pruneMessageHistory } = require('./messageUtils'); // Import pruning logic
 
+const systemMessage = "You are a helpful assistant capable of using tools. Use tools only when necessary and relevant to the user's request. Format responses using Markdown."
+
 /**
  * Handles the 'chat-stream' IPC event for streaming chat completions.
  *
@@ -107,7 +109,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         // Prepare API parameters
         const chatCompletionParams = {
             messages: [
-                { role: "system", content: "You are a helpful assistant capable of using tools. Use tools only when necessary and relevant to the user's request. Format responses using Markdown." },
+                { role: "system", content: `${systemMessage} ${settings.systemMessage || ""}`},
                 ...prunedMessages // Use the pruned history
             ],
             model: modelToUse,
