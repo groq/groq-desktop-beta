@@ -513,7 +513,9 @@ function Settings() {
                             <div className="pl-2 mt-1">
                               {Object.entries(config.env).map(([key, value]) => (
                                 <div key={key} className="text-xs font-mono">
-                                  <span className="text-gray-300">{key}=</span><span className="text-gray-400">{value}</span>
+                                  <span className="text-gray-300">{key}=</span><span className="text-gray-400">
+                                    {value.length <= 8 ? value : `${value.substring(0, 4)}${'•'.repeat(value.length - 8)}${value.substring(value.length - 4)}`}
+                                  </span>
                                 </div>
                               ))}
                             </div>
