@@ -154,7 +154,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
 
   const handleAuthorizeServer = async (serverId) => {
     const server = configuredServers.find(s => s.id === serverId);
-    if (!server || server.transport !== 'sse' || !server.url) { // Only allow for SSE with URL
+    if (!server || server.transport === 'stdio' || !server.url) { // Only allow for SSE with URL
         console.error("Cannot start auth flow: server config is not SSE or URL missing for", serverId);
         // Show error message to user?
         return;
