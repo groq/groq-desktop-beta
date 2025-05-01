@@ -32,7 +32,7 @@ xattr -c /Applications/Groq\ Desktop.app
 - Node.js (v18+)
 - pnpm package manager
 
-## Setup
+## Local development Setup
 
 1. Clone this repository
 2. Install dependencies:
@@ -41,6 +41,7 @@ xattr -c /Applications/Groq\ Desktop.app
    ```
 3. Start the development server:
    ```
+   export GROQ_API_KEY=REPLACE-ME # create one at https://console.groq.com/keys
    pnpm dev
    ```
 

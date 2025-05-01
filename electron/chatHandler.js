@@ -17,8 +17,13 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
     try {
         // Validate API Key
         if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
-            event.sender.send('chat-stream-error', { error: "API key not configured. Please add your GROQ API key in settings." });
-            return;
+            // support env var for local dev
+            if (!process.env.GROQ_API_KEY) {
+                event.sender.send('chat-stream-error', { error: "API key not configured. Please add your GROQ API key in settings." });
+                return;
+            } else {
+                settings.GROQ_API_KEY = process.env.GROQ_API_KEY;
+            }
         }
 
         // Determine model to use: prioritise argument, then settings, then fallback
@@ -78,17 +83,17 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
 
             // Ensure assistant message content is a string
             if (finalMsg.role === 'assistant' && typeof finalMsg.content !== 'string') {
-                 if (Array.isArray(finalMsg.content)) {
-                     // Extract text from parts if it's an array
-                     const textContent = finalMsg.content.filter(p => p.type === 'text').map(p => p.text).join('');
-                     finalMsg.content = textContent;
-                 } else {
-                     // Attempt to stringify other non-string formats, log warning
-                     console.warn('Unexpected assistant message content format, attempting stringify:', finalMsg.content);
-                     try {
-                         finalMsg.content = JSON.stringify(finalMsg.content);
-                     } catch { finalMsg.content = '[Non-string content]'; }
-                 }
+                if (Array.isArray(finalMsg.content)) {
+                    // Extract text from parts if it's an array
+                    const textContent = finalMsg.content.filter(p => p.type === 'text').map(p => p.text).join('');
+                    finalMsg.content = textContent;
+                } else {
+                    // Attempt to stringify other non-string formats, log warning
+                    console.warn('Unexpected assistant message content format, attempting stringify:', finalMsg.content);
+                    try {
+                        finalMsg.content = JSON.stringify(finalMsg.content);
+                    } catch { finalMsg.content = '[Non-string content]'; }
+                }
             }
 
             // Ensure tool message content is stringified if not already
@@ -168,7 +173,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
                         event.sender.send('chat-stream-content', { content: delta.content });
                     }
 
-                     // Accumulate reasoning (example)
+                    // Accumulate reasoning (example)
                     // if (delta?.reasoning) { ... }
 
                     // Accumulate and process tool calls
@@ -243,18 +248,18 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
                 // Provide more context in the error message sent to the client
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 event.sender.send('chat-stream-error', {
-                     error: `Failed to get chat completion: ${errorMessage}`,
-                     details: error // Send the full error object if needed for frontend debugging
+                    error: `Failed to get chat completion: ${errorMessage}`,
+                    details: error // Send the full error object if needed for frontend debugging
                 });
                 return; // Exit function after sending error
             }
         }
 
-         // If retries are exhausted for tool_use_failed
-         if (retryCount > MAX_TOOL_USE_RETRIES) {
-             console.error(`Max retries (${MAX_TOOL_USE_RETRIES}) exceeded for tool_use_failed error.`);
-             event.sender.send('chat-stream-error', { error: `The model repeatedly failed to use tools correctly after ${MAX_TOOL_USE_RETRIES + 1} attempts. Please try rephrasing your request.` });
-         }
+        // If retries are exhausted for tool_use_failed
+        if (retryCount > MAX_TOOL_USE_RETRIES) {
+            console.error(`Max retries (${MAX_TOOL_USE_RETRIES}) exceeded for tool_use_failed error.`);
+            event.sender.send('chat-stream-error', { error: `The model repeatedly failed to use tools correctly after ${MAX_TOOL_USE_RETRIES + 1} attempts. Please try rephrasing your request.` });
+        }
 
     } catch (outerError) {
         // Catch errors during setup (e.g., SDK init, message prep)
