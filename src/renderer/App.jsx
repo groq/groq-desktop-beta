@@ -826,7 +826,7 @@ function App() {
                 id="model-select"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="border border-gray-500 rounded-md bg-transparent text-white"
+                className="border border-gray-500 rounded-md text-white"
               >
                 {models.map(model => (
                   <option key={model} value={model}>{model}</option>

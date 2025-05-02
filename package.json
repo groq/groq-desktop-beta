@@ -10,7 +10,12 @@
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "build": "vite build",
     "build:electron": "electron-builder",
-    "dist": "pnpm build && pnpm build:electron"
+    "dist": "pnpm build && pnpm build:electron",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:win": "pnpm build && electron-builder --win",
+    "dist:linux": "pnpm build && electron-builder --linux",
+    "test:platforms": "./test-cross-platform.sh",
+    "test:paths": "node test-paths.js"
   },
   "keywords": [
     "electron",
@@ -63,7 +68,9 @@
       "node_modules/**/*"
     ],
     "asarUnpack": [
-      "electron/scripts/*.sh"
+      "electron/scripts/*.sh",
+      "electron/scripts/*.cmd",
+      "electron/scripts/*.ps1"
     ],
     "directories": {
       "buildResources": "public",
@@ -71,16 +78,18 @@
     },
     "mac": {
       "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "public/icon.png"
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "rpm"],
+      "category": "Development",
+      "icon": "public/icon.png"
     }
   },
-  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
-  "pnpm": {
-    "ignoredBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ],
-    "onlyBuiltDependencies": [
-      "electron"
-    ]
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

@@ -28,24 +28,32 @@ function checkPathExists(filePath) {
   }
 }
 
-// Helper function to find a command using 'which'
+// Helper function to find a command using 'which' or 'where' (Windows)
 function findCommandUsingWhich(command) {
   try {
-    // Escape command to prevent injection issues if needed, though 'which' is generally safe
-    const safeCommand = command.replace(/[^a-zA-Z0-9_\-.]/g, ''); // Basic sanitization (removed unnecessary escape before dot)
+    // Escape command to prevent injection issues if needed
+    const safeCommand = command.replace(/[^a-zA-Z0-9_\-.]/g, ''); // Basic sanitization
     if (safeCommand !== command) {
-        console.warn(`Command '${command}' sanitized to '${safeCommand}' for 'which' lookup.`);
+        console.warn(`Command '${command}' sanitized to '${safeCommand}' for command lookup.`);
     }
-    if (!safeCommand) return null; // Don't run 'which' with empty string
+    if (!safeCommand) return null; // Don't run lookup with empty string
 
-    const commandPath = execSync(`which ${safeCommand}`).toString().trim();
+    let commandPath;
+    if (process.platform === 'win32') {
+      // Use 'where' command on Windows
+      commandPath = execSync(`where ${safeCommand}`).toString().trim().split('\r\n')[0]; // Use first result
+    } else {
+      // Use 'which' command on Unix-like systems
+      commandPath = execSync(`which ${safeCommand}`).toString().trim();
+    }
+
     if (commandPath && checkPathExists(commandPath)) {
-      console.log(`Found ${command} using 'which' at ${commandPath}`);
+      console.log(`Found ${command} using '${process.platform === 'win32' ? 'where' : 'which'}' at ${commandPath}`);
       return commandPath;
     }
   } catch (error) {
-    // Silently fail if 'which' command fails or path doesn't exist
-    // console.error(`'which ${command}' failed:`, error.message); // Optional debug log
+    // Silently fail if command lookup fails or path doesn't exist
+    // console.error(`Command lookup for '${command}' failed:`, error.message); // Optional debug log
   }
   return null;
 }
@@ -84,26 +92,48 @@ function resolveCommandPath(command) {
       `${homeDir}/.nvm/current/bin/npx`
   ] : [];
 
+  // Get platform-specific file extension and prefix for script files
+  const getScriptInfo = () => {
+    if (process.platform === 'win32') {
+      return {
+        ext: process.env.SHELL && process.env.SHELL.includes('powershell') ? '.ps1' : '.cmd',
+        prefix: ''
+      };
+    } else if (process.platform === 'linux') {
+      return {
+        ext: '.sh',
+        prefix: '-linux'
+      };
+    } else {
+      return {
+        ext: '.sh',
+        prefix: ''
+      };
+    }
+  };
+  
+  const scriptInfo = getScriptInfo();
+
   // Define configurations for commands that might need special handling or scripts
   const specialCommands = {
     'npx': {
-      scriptName: 'run-npx.sh',
-      knownPaths: [...baseNpxPaths, ...nvmNpxPaths] // Combine paths conditionally
+      scriptName: `run-npx${scriptInfo.prefix}${scriptInfo.ext}`,
+      knownPaths: process.platform === 'win32' ? [] : [...baseNpxPaths, ...nvmNpxPaths] // Only use paths on Unix
     },
     'uvx': {
-      scriptName: 'run-uvx.sh',
-      knownPaths: [
+      scriptName: `run-uvx${scriptInfo.prefix}${scriptInfo.ext}`,
+      knownPaths: process.platform === 'win32' ? [] : [
         '/opt/homebrew/bin/uvx',
         '/usr/local/bin/uvx',
         '/usr/bin/uvx',
         `${homeDir}/.local/bin/uvx`
       ].filter(p => !!homeDir || !p.includes(homeDir))
     },
-    'docker': { scriptName: 'run-docker.sh' },
-    'node': { scriptName: 'run-node.sh' },
+    'docker': { scriptName: `run-docker${scriptInfo.prefix}${scriptInfo.ext}` },
+    'node': { scriptName: `run-node${scriptInfo.prefix}${scriptInfo.ext}` },
     'deno': {
-      scriptName: 'run-deno.sh',
-      knownPaths: [
+      scriptName: `run-deno${scriptInfo.prefix}${scriptInfo.ext}`,
+      knownPaths: process.platform === 'win32' ? [] : [
         `${homeDir}/.deno/bin/deno`,
         '/opt/homebrew/bin/deno',
         '/usr/local/bin/deno'

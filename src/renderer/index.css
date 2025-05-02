@@ -292,7 +292,8 @@ select#model-select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
   border-color: #4b5563;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  color: #e5e7eb; /* Added dark text */
+  color: #ffffff; /* Brightened text color for better contrast */
+  background-color: #1e293b; /* Added darker background color */
   background-position: right 0.5rem center;
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
@@ -314,4 +315,10 @@ select#model-select:focus {
 select#model-select:hover {
   /* Apply dark hover styles directly */
   border-color: #6b7280;
+}
+
+/* Style the option elements in the dropdown for better readability */
+select#model-select option {
+  background-color: #1e293b;
+  color: #ffffff;
 } 

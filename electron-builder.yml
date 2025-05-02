@@ -1,0 +1,96 @@
+appId: com.groq.desktop
+productName: Groq Desktop
+artifactName: "${productName}-${version}.${ext}"
+copyright: "Copyright © 2025 Groq"
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+  - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+
+extraMetadata:
+  main: dist/main/index.js
+
+# macOS Configuration
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    NSRequiresAquaSystemAppearance: false
+
+# Windows Configuration
+win:
+  target:
+    - nsis
+    - portable
+  icon: build/icon.ico
+  publisherName: Groq
+  verifyUpdateCodeSignature: false
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/installerIcon.ico
+  uninstallerIcon: build/uninstallerIcon.ico
+  installerHeaderIcon: build/installerHeaderIcon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Groq Desktop
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+
+# Linux Configuration
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Development
+  synopsis: Local Groq Desktop chat app with MCP support
+  description: Chat interface with image support and local MCP servers for Groq models
+  vendor: Groq
+  maintainer: Groq
+  icon: build/icon.png
+  executableName: groq-desktop
+
+publish:
+  provider: github
+  owner: groq
+  repo: groq-desktop-beta
+
+# Make sure scripts are executable
+fileAssociations:
+  - ext: sh
+    role: Shell
+    perMachine: true
+    isExecutable: true
+  - ext: cmd
+    role: Command
+    perMachine: true
+    isExecutable: true 
+  - ext: ps1
+    role: PowerShell
+    perMachine: true
+    isExecutable: true
+
+# Ensure executable permissions are set
+asarUnpack:
+  - "electron/scripts/*.sh"
+  - "electron/scripts/*.cmd"
+  - "electron/scripts/*.ps1"

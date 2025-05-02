@@ -191,24 +191,48 @@ async function connectMcpServerProcess(serverId, connectionDetails, authProvider
             });
 
         } else { // stdio
-            // Construct the PATH needed by the script
-            const requiredPaths = [
-                '/usr/local/bin',
-                '/usr/bin',
-                '/bin',
-                '/usr/sbin',
-                '/sbin',
-                process.env.HOME ? `${process.env.HOME}/.deno/bin` : null, // Deno install path
-                '/opt/homebrew/bin' // Homebrew on Apple Silicon
-            ].filter(Boolean); // Remove nulls if HOME isn't set
+            // Construct the PATH needed by the script based on platform
+            let requiredPaths = [];
+            const pathSeparator = process.platform === 'win32' ? ';' : ':';
+            
+            if (process.platform === 'win32') {
+                // Windows paths
+                requiredPaths = [
+                    process.env.SystemRoot ? `${process.env.SystemRoot}\\System32` : null,
+                    process.env.SystemRoot ? `${process.env.SystemRoot}` : null,
+                    process.env.USERPROFILE ? `${process.env.USERPROFILE}\\.deno\\bin` : null
+                ].filter(Boolean);
+            } else if (process.platform === 'linux') {
+                // Linux paths
+                requiredPaths = [
+                    '/usr/local/bin',
+                    '/usr/bin',
+                    '/bin',
+                    '/usr/sbin',
+                    '/sbin',
+                    process.env.HOME ? `${process.env.HOME}/.deno/bin` : null,
+                    process.env.HOME ? `${process.env.HOME}/.local/bin` : null
+                ].filter(Boolean);
+            } else {
+                // macOS paths
+                requiredPaths = [
+                    '/usr/local/bin',
+                    '/usr/bin',
+                    '/bin',
+                    '/usr/sbin',
+                    '/sbin',
+                    process.env.HOME ? `${process.env.HOME}/.deno/bin` : null,
+                    '/opt/homebrew/bin' // Homebrew on Apple Silicon
+                ].filter(Boolean);
+            }
 
             const baseEnvPath = process.env.PATH || '';
             const customEnvPath = connectionDetails.env?.PATH || '';
             const combinedPath = [
                 ...requiredPaths,
-                ...baseEnvPath.split(':'),
-                ...customEnvPath.split(':')
-            ].filter((p, i, arr) => p && arr.indexOf(p) === i).join(':'); // Deduplicate and join
+                ...baseEnvPath.split(pathSeparator),
+                ...customEnvPath.split(pathSeparator)
+            ].filter((p, i, arr) => p && arr.indexOf(p) === i).join(pathSeparator); // Deduplicate and join
 
             const finalEnv = {
                  ...process.env, // Base environment
