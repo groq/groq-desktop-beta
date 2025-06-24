@@ -17,8 +17,8 @@ class PopupWindowManager {
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
     
     // Popup dimensions
-    const popupWidth = 400;
-    const popupHeight = 250;
+    const popupWidth = 500;
+    const popupHeight = 500;
     
     // Center the popup on screen
     const x = Math.round((screenWidth - popupWidth) / 2);
@@ -30,9 +30,7 @@ class PopupWindowManager {
       x: x,
       y: y,
       minWidth: 400,
-      minHeight: 250,
-      maxWidth: 400,
-      maxHeight: 250,
+      minHeight: 300,
       show: false, // Don't show until ready
       alwaysOnTop: true,
       skipTaskbar: true, // Don't show in taskbar

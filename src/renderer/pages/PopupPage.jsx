@@ -1,4 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Globe, Search, ArrowUp, Mic, X, FileText, Bot } from 'lucide-react';
+import clsx from 'clsx';
+
+const ContextPill = ({ title, onRemove, onClick }) => (
+  <div onClick={onClick} className="cursor-pointer bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-800 flex items-center gap-2 shadow-sm hover:bg-gray-50">
+    <FileText size={14} className="text-gray-500" />
+    <span className="truncate max-w-xs">{title}</span>
+    <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-gray-400 hover:text-gray-600">
+      <X size={14} />
+    </button>
+  </div>
+);
 
 const PopupPage = () => {
   const [context, setContext] = useState(null);
@@ -9,7 +21,7 @@ const PopupPage = () => {
   const [models, setModels] = useState([]);
   const [showContext, setShowContext] = useState(true);
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Load models and context on mount
   useEffect(() => {
@@ -24,8 +36,8 @@ const PopupPage = () => {
 
     // Focus input on mount
     setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
       }
     }, 100);
 
@@ -38,6 +50,17 @@ const PopupPage = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const scrollHeight = textarea.scrollHeight;
+      //-3 for border and padding
+      textarea.style.height = `${scrollHeight}px`;
+    }
+  }, [inputValue]);
 
   const initializePopup = async () => {
     try {
@@ -79,10 +102,10 @@ const PopupPage = () => {
 
   const useContext = () => {
     if (context && context.text) {
-      setInputValue(context.text);
+      setInputValue(prev => prev ? `${prev}\n${context.text}` : context.text);
       setShowContext(false);
-      if (inputRef.current) {
-        inputRef.current.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
       }
     }
   };
@@ -179,104 +202,90 @@ const PopupPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shadow-sm">
-        
-        <div className="flex items-center gap-2">
-          {models.length > 0 && (
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="text-xs border border-gray-300 rounded px-2 py-1"
-            >
-              {models.map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-          )}
-          
-          <button
-            onClick={closePopup}
-            className="text-gray-400 hover:text-gray-600 p-1"
-            title="Close (Esc)"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <div className="flex flex-col h-screen bg-neutral-50 text-sm font-sans">
+      
+      {/* Header with Context */}
+      <div className="px-3 pt-3">
+        {context && showContext && (
+          <ContextPill 
+            title={context.title || 'Captured Context'} 
+            onRemove={() => setShowContext(false)}
+            onClick={useContext}
+          />
+        )}
       </div>
 
-      {/* Context Display */}
-      {context && showContext && (
-        <div className="p-3 bg-blue-50 border-b border-blue-200">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-sm font-medium text-blue-800 truncate">
-                  {context.title || 'Captured Context'}
-                </span>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message, index) => (
+          <div key={index} className={clsx('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+            {message.role === 'assistant' && (
+              <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                <Bot size={18} className="text-gray-600"/>
+              </div>
+            )}
+            <div className={clsx('max-w-[85%] rounded-2xl px-4 py-2.5', {
+              'bg-blue-600 text-white': message.role === 'user',
+              'bg-white border border-gray-100 text-gray-800 shadow-sm': message.role === 'assistant',
+            })}>
+              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                {message.content}
+                {message.isStreaming && (
+                  <span className="inline-block w-2 h-3 bg-current opacity-75 animate-pulse ml-1.5 rounded-full"></span>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Messages */}
-      {messages.length > 0 && (
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {messages.map((message, index) => (
-            <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                message.role === 'user' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-white border border-gray-200 text-gray-800'
-              }`}>
-                <div className="whitespace-pre-wrap break-words text-sm">
-                  {message.content}
-                  {message.isStreaming && (
-                    <span className="inline-block w-2 h-4 bg-current opacity-75 animate-pulse ml-1"></span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <div ref={messagesEndRef} />
-      
+        ))}
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <Search size={40} className="mb-2"/>
+            <p>Ask anything to start</p>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
 
       {/* Input */}
-      <div className="p-3 bg-white border-t border-gray-200 w-full h-[50px]">
-        <div className="flex gap-2">
+      <div className="px-4 pb-3 pt-2 bg-neutral-50 border-t border-neutral-200">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex items-end">
+          <div className="flex items-center gap-1">
+            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+              <Plus size={20} />
+            </button>
+            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+              <Globe size={18} />
+            </button>
+          </div>
           <textarea
-            ref={inputRef}
+            ref={textareaRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder="Type your message... (Enter to send, Esc to close)"
-            className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={3}
+            placeholder="Ask anything..."
+            className="flex-1 max-h-40 resize-none bg-transparent border-none focus:ring-0 px-3 text-base placeholder-gray-500"
+            rows={1}
             disabled={loading}
           />
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || loading}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-          >
-            {loading ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            ) : (
-              'Send'
-            )}
-          </button>
+          <div className="flex items-center gap-1">
+             <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+                <Mic size={20} />
+            </button>
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || loading}
+              className="w-9 h-9 flex items-center justify-center bg-black text-white rounded-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? (
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <ArrowUp size={20} />
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
