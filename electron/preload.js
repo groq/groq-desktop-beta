@@ -77,5 +77,41 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('mcp-auth-reconnect-complete', listener);
   },
 
+  // --- Context Sharing Functions (Legacy - for URL/CLI context) ---
+  getPendingContext: () => ipcRenderer.invoke('get-pending-context'),
+  clearContext: () => ipcRenderer.invoke('clear-context'),
+  onExternalContext: (callback) => {
+    const listener = (event, context) => callback(context);
+    ipcRenderer.on('external-context', listener);
+    // Return a function to remove the listener
+    return () => ipcRenderer.removeListener('external-context', listener);
+  },
+
+  // --- Context Capture Functions (New - for global hotkey context) ---
+  getCapturedContext: () => ipcRenderer.invoke('get-captured-context'),
+  clearCapturedContext: () => ipcRenderer.invoke('clear-captured-context'),
+  triggerContextCapture: () => ipcRenderer.invoke('trigger-context-capture'),
+  captureManualContext: (text, title, source) => ipcRenderer.invoke('capture-manual-context', text, title, source),
+  
+  // Event listener for context captured via global hotkey
+  onContextCaptured: (callback) => {
+    const listener = (event, context) => callback(context);
+    ipcRenderer.on('context-captured', listener);
+    // Return a function to remove the listener
+    return () => ipcRenderer.removeListener('context-captured', listener);
+  },
+
+  // --- Popup Window Functions ---
+  closePopup: () => ipcRenderer.invoke('close-popup'),
+  isPopupOpen: () => ipcRenderer.invoke('is-popup-open'),
+  
+  // Event listener for popup context (sent when popup opens with context)
+  onPopupContext: (callback) => {
+    const listener = (event, context) => callback(context);
+    ipcRenderer.on('popup-context', listener);
+    // Return a function to remove the listener
+    return () => ipcRenderer.removeListener('popup-context', listener);
+  },
+
   // Other?
 }); 

@@ -4,6 +4,7 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ToolsPanel from './components/ToolsPanel';
 import ToolApprovalModal from './components/ToolApprovalModal';
+import ContextDisplay from './components/ContextDisplay';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
@@ -86,6 +87,10 @@ function App() {
   const [pendingApprovalCall, setPendingApprovalCall] = useState(null); // Holds the tool call object needing approval
   const [pausedChatState, setPausedChatState] = useState(null); // Holds { currentMessages, finalAssistantMessage, accumulatedResponses }
   // --- End Tool Approval State ---
+
+  // --- Context Sharing State ---
+  const [externalContext, setExternalContext] = useState(null);
+  // --- End Context Sharing State ---
 
   const handleRemoveLastMessage = () => {
     setMessages(prev => {
