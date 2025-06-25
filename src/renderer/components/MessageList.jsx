@@ -40,7 +40,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
   const displayMessages = messages.filter(message => message.role !== 'tool');
 
   return (
-    <div className="space-y-2 pt-4">
+    <div className="space-y-2 pt-4 p-4">
       {displayMessages.map((message, index) => (
         <Message 
           key={index} 

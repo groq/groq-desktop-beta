@@ -22,9 +22,9 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
 
   const messageClasses = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
   // Apply background only for user messages
-  const bubbleStyle = isUser ? 'bg-user-message-bg' : ''; // No background for assistant/system
+  const bubbleStyle = isUser ? 'bg-gray-200' : ''; // No background for assistant/system
   const bubbleClasses = `relative px-4 py-3 rounded-lg max-w-xl ${bubbleStyle} group`; // Added group for remove button
-  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-white' : 'text-white'} break-words`; // Keep text white for both, use break-words
+  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-black' : 'text-black'} break-words`; // Keep text white for both, use break-words
 
   const toggleReasoning = () => setShowReasoning(!showReasoning);
 
@@ -34,10 +34,10 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
         {isLastMessage && onRemoveMessage && (
           <button 
             onClick={onRemoveMessage}
-            className={`absolute ${isUser ? 'right-1' : 'left-1'} top-0 -translate-y-1/2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600 z-10`}
+            className={`absolute ${isUser ? 'right-1' : 'left-1'} top-0 -translate-y-1/2 bg-gray-100 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10`}
             title="Remove message"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="black">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

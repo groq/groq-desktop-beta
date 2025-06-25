@@ -3,10 +3,7 @@
 @tailwind utilities;
 
 body {
-  /* Apply the new background color directly */
-  /* Keep text color for dark mode */
-  /* Ensure the base body background is dark */
-  @apply bg-gray-900 text-gray-100;
+  @apply bg-[#121418] text-gray-100;
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
@@ -17,12 +14,11 @@ body {
   }
   
   .btn-primary {
-    @apply bg-primary text-white hover:bg-primary/90;
+    @apply bg-[#f55036] text-white hover:bg-[#f55036]/90;
   }
   
   .input {
-    /* Apply dark border directly */
-    @apply px-4 py-2 border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-gray-800 text-gray-100;
+    @apply px-4 py-2 border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f55036] bg-[#222326] text-gray-100;
   }
 
   /* Markdown styling */
@@ -59,13 +55,11 @@ body {
   }
 
   .markdown-content code {
-    /* Apply dark background directly */
-    @apply bg-gray-800 px-1 py-0.5 rounded;
+    @apply bg-[#222326] px-1 py-0.5 rounded;
   }
 
   .markdown-content pre {
-    /* Apply dark background directly */
-    @apply bg-gray-800 p-3 rounded my-2 overflow-auto;
+    @apply bg-[#222326] p-3 rounded my-2 overflow-auto;
   }
 
   .markdown-content pre code {
@@ -87,7 +81,6 @@ body {
 
 /* Apply link styles outside the layer for higher specificity */
 .markdown-content a {
-  /* Apply dark link color directly */
   @apply text-blue-400 underline;
 }
 
@@ -96,121 +89,48 @@ body {
   word-break: break-all;
 }
 
-/* Add these styles at the end of index.css */
-
-.tools-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+/* Tools and status indicators */
 .tools-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Apply dark color/background directly */
-  color: #e0e0e0;
-  background-color: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-  padding: 5px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.tools-button:hover {
-  /* Apply dark hover color/background directly */
-  color: white;
-  background-color: rgba(255, 255, 255, 0.12);
+  @apply flex items-center justify-center text-gray-400 bg-[#222326] hover:text-white p-2 rounded-full transition-colors;
 }
 
 .status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  /* Apply dark color/background directly */
-  color: #e0e0e0;
-  background-color: rgba(255, 255, 255, 0.08);
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
+  @apply flex items-center gap-2 text-sm text-gray-400 bg-[#222326] font-medium px-3 py-1 rounded-full;
 }
 
 .status-indicator.loading {
-  /* Apply dark color directly */
-  color: #77aaff;
-  font-weight: 500;
+  @apply text-blue-400 font-medium;
 }
 
 .loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(66, 133, 244, 0.2);
-  border-top-color: #4285f4;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+  @apply w-4 h-4 border-2 border-blue-400/20 border-t-blue-400 rounded-full animate-spin;
 }
 
 .refresh-button {
-  background: none;
-  border: none;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  /* Apply dark color directly */
-  color: #e0e0e0;
-  transition: all 0.2s ease;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-}
-
-.refresh-button:hover {
-  /* Apply dark hover color/background directly */
-  color: #f55036;
-  background-color: rgba(255, 255, 255, 0.1);
+  @apply bg-transparent border-none text-gray-400 hover:text-[#f55036] cursor-pointer transition-colors p-1 rounded-full flex items-center justify-center w-6 h-6;
 }
 
 .refresh-button span {
-  display: inline-block;
-  transition: transform 0.2s ease;
+  @apply inline-block transition-transform;
 }
 
-.refresh-button:hover span {
-  transform: rotate(30deg);
+/* Model selector styling */
+select#model-select {
+  @apply appearance-none bg-transparent text-gray-400 text-sm border-none focus:ring-0 cursor-pointer hover:text-white transition-colors;
 }
 
-/* Streaming message animation */
+select#model-select option {
+  @apply bg-[#222326] text-white;
+}
+
+/* Message streaming animation */
 .streaming-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 8px;
+  @apply flex items-center gap-1 mb-2;
 }
 
-.streaming-indicator .dot-1,
-.streaming-indicator .dot-2,
-.streaming-indicator .dot-3 {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  /* Apply dark background directly */
-  background-color: #ccc;
-  opacity: 0.6;
+.streaming-indicator .dot {
+  @apply w-1.5 h-1.5 rounded-full bg-gray-400 opacity-60;
 }
-
-/* Remove .dark specific streaming indicator styles */
-/*
-.dark .streaming-indicator .dot-1,
-.dark .streaming-indicator .dot-2,
-.dark .streaming-indicator .dot-3 {
-  background-color: #ccc;
-}
-*/
 
 .streaming-indicator .dot-1 {
   animation: pulse-dot 1.4s infinite ease-in-out;

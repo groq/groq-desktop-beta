@@ -8,7 +8,7 @@ import ContextDisplay from './components/ContextDisplay';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-
+import { Settings } from 'lucide-react';
 
 // LocalStorage keys
 const TOOL_APPROVAL_PREFIX = 'tool_approval_';
@@ -818,90 +818,59 @@ function App() {
     }
   };
   return (
-    <div className="flex flex-col h-screen">
-      <header className="bg-user-message-bg shadow">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl text-white">
-            groq<span className="text-primary">desktop</span>
-          </h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center">
-              <label htmlFor="model-select" className="mr-3 text-gray-300 font-medium">Model:</label>
-              <select
-                id="model-select"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="border border-gray-500 rounded-md text-white"
-              >
-                {models.map(model => (
-                  <option key={model} value={model}>{model}</option>
-                ))}
-              </select>
-            </div>
-            <Link to="/settings" className="btn btn-primary">Settings</Link>
-          </div>
-        </div>
+    <>
+    <div className="flex flex-col h-screen bg-white">
+      <header className="flex justify-between items-center p-6 sticky top-0 z-10 bg-gray/200 shadow-md">
+        <h1 className="text-2xl font-montserrat font-bold text-black">
+          Groq
+        </h1>
+        <Link to="/settings">
+          <Settings className="pl-2 text-gray-400 hover:text-gray-600 transition-colors mt-[1px] mr-5" size={30}  />
+        </Link>
       </header>
-      
-      <main className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-2">
-          <MessageList 
-            messages={messages} 
-            onToolCallExecute={executeToolCall} 
-            onRemoveLastMessage={handleRemoveLastMessage} 
-          />
-          <div ref={messagesEndRef} />
-        </div>
-        
-        <div className="bg-user-message-bg p-2">
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="tools-container">
-                  <div 
-                    className="tools-button"
-                    onClick={() => {
-                      setIsToolsPanelOpen(!isToolsPanelOpen);
-                      // Force refresh of MCP tools when opening panel
-                      if (!isToolsPanelOpen) {
-                        refreshMcpTools();
-                      }
-                    }}
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  {mcpServersStatus.loading && (
-                    <div className="status-indicator loading">
-                      <div className="loading-spinner"></div>
-                      <span>{mcpServersStatus.message}</span>
-                    </div>
-                  )}
-                  {!mcpServersStatus.loading && (
-                    <div className="status-indicator">
-                      <span>{mcpServersStatus.message || "No tools available"}</span>
-                      <button 
-                        className="refresh-button" 
-                        onClick={refreshMcpTools}
-                        title="Refresh MCP tools"
-                      >
-                        <span>↻</span>
-                      </button>
-                    </div>
-                  )}
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-3xl">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center">
+              <h1 className="text-4xl font-bold mb-8 text-white">
+                <span className="text-primary font-montserrat"> Build Fast</span>
+              </h1>
+                <ChatInput
+                  onSendMessage={handleSendMessage}
+                  loading={loading}
+                  visionSupported={visionSupported}
+                  models={models}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                />
+              
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col h-full">
+                <div className="overflow-y-auto max-h-[calc(100vh-300px)] mb-4">
+                  <MessageList 
+                    messages={messages} 
+                    onToolCallExecute={executeToolCall} 
+                    onRemoveLastMessage={handleRemoveLastMessage} 
+                  />
+                  <div ref={messagesEndRef} />
+                </div>
+                <div className="mt-auto sticky bottom-0">
+                  <ChatInput
+                    onSendMessage={handleSendMessage}
+                    loading={loading}
+                    visionSupported={visionSupported}
+                    models={models}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                  />
                 </div>
               </div>
-            </div>
-
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              loading={loading}
-              visionSupported={visionSupported}
-            />
-          </div>
+            </>
+          )}
         </div>
-      </main>
+      </div>
 
       {isToolsPanelOpen && (
         <ToolsPanel
@@ -912,15 +881,14 @@ function App() {
         />
       )}
 
-      {/* --- Tool Approval Modal --- */}
       {pendingApprovalCall && (
         <ToolApprovalModal
           toolCall={pendingApprovalCall}
           onApprove={handleToolApproval}
         />
       )}
-      {/* --- End Tool Approval Modal --- */}
     </div>
+    </>
   );
 }
 
