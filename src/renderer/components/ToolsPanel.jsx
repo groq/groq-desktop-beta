@@ -189,10 +189,10 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
     .map(server => server.id);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-gray-800 w-full max-w-3xl max-h-[80vh] rounded-lg shadow-lg overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-white">Available Tools ({tools.length})</h2>
+    <div className="fixed inset-0 bg-white bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-white w-full max-w-3xl max-h-[80vh] border border-gray-300 rounded-lg shadow-lg overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-gray-300 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-black">Available Tools ({tools.length})</h2>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-gray-200"
@@ -207,7 +207,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
           {/* Show configured servers section */}
           {configuredServers.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-md font-semibold text-white mb-2">Configured MCP Servers</h3>
+              <h3 className="text-md font-semibold text-black mb-2">Configured MCP Servers</h3>
               <div className="border border-gray-700 rounded-md overflow-hidden mb-4">
                 {configuredServers.map(server => (
                   <div key={server.id} className="p-3 border-b border-gray-700 last:border-b-0 bg-gray-900 flex justify-between items-center">
@@ -282,15 +282,15 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
           )}
         
           {/* Available tools section */}
-          <h3 className="text-md font-semibold text-white mb-2">Available Tools by Server</h3>
+          <h3 className="text-md font-semibold text-black mb-2">Available Tools by Server</h3>
           {Object.keys(toolsByServer).length === 0 ? (
-            <p className="text-gray-400 text-center">No tools available. All configured servers are disconnected.</p>
+            <p className="text-black text-center">No tools available. All configured servers are disconnected.</p>
           ) : (
             <div className="space-y-6">
               {Object.entries(toolsByServer).map(([serverId, serverTools]) => (
                 <div key={serverId} className="border border-gray-700 rounded-lg overflow-hidden">
                   <div className="p-3 bg-gray-600 flex justify-between items-center">
-                    <h3 className="font-medium text-white">
+                    <h3 className="font-medium text-black">
                       Server: {serverId} ({serverTools.length} tools)
                     </h3>
                     {serverId !== 'unknown' && serverStatuses[serverId] === 'connected' && (
@@ -315,7 +315,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                           onClick={() => toggleToolExpand(tool.name)}
                         >
                           <div>
-                            <h3 className="font-medium text-white">{tool.name}</h3>
+                            <h3 className="font-medium text-black">{tool.name}</h3>
                             <p className="text-sm text-gray-400">
                               {tool.description?.substring(0, 100)}
                               {tool.description?.length > 100 ? '...' : ''}
