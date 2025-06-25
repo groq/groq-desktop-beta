@@ -18,27 +18,27 @@ class PopupWindowManager {
     
     // Popup dimensions
     const popupWidth = 500;
-    const popupHeight = 500;
+    const initialPopupHeight = 100; // Height for just the input box
     
     // Center the popup on screen
     const x = Math.round((screenWidth - popupWidth) / 2);
-    const y = Math.round((screenHeight - popupHeight) / 2);
+    const y = Math.round((screenHeight - initialPopupHeight) / 2);
 
     this.popupWindow = new BrowserWindow({
       width: popupWidth,
-      height: popupHeight,
+      height: initialPopupHeight,
       x: x,
       y: y,
       minWidth: 400,
-      minHeight: 300,
+      minHeight: initialPopupHeight,
       show: false, // Don't show until ready
       alwaysOnTop: true,
       skipTaskbar: true, // Don't show in taskbar
-      resizable: true,
+      resizable: false, // Not resizable initially
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+      titleBarStyle: 'hiddenInset',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -46,8 +46,8 @@ class PopupWindowManager {
         enableRemoteModule: false
       },
       // Make it look like a popup
-      frame: true,
-      transparent: false,
+      frame: false,
+      transparent: true,
       hasShadow: true,
       vibrancy: process.platform === 'darwin' ? 'under-window' : undefined
     });
@@ -79,7 +79,7 @@ class PopupWindowManager {
     // Handle popup losing focus (optional: could auto-close)
     this.popupWindow.on('blur', () => {
       // Optionally auto-close when losing focus
-      // this.closePopup();
+      this.closePopup();
     });
 
     // Handle escape key to close
@@ -103,6 +103,26 @@ class PopupWindowManager {
   closePopup() {
     if (this.popupWindow && !this.popupWindow.isDestroyed()) {
       this.popupWindow.close();
+    }
+  }
+
+  // Resize the popup window and reposition it to expand upwards
+  resizePopup(width, height, resizable = true) {
+    if (this.isOpen()) {
+      const window = this.getPopupWindow();
+      const bounds = window.getBounds();
+      
+      // Calculate new y position to make it seem like it's expanding upwards
+      const newY = bounds.y - (height - bounds.height);
+
+      window.setBounds({
+        x: bounds.x - Math.round((width - bounds.width) / 2),
+        y: newY,
+        width,
+        height,
+      }, true); // Animate on macOS
+
+      window.setResizable(resizable);
     }
   }
 

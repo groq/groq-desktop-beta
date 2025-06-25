@@ -332,6 +332,12 @@ app.whenReady().then(async () => {
     return popupWindowManager ? popupWindowManager.isOpen() : false;
   });
 
+  ipcMain.handle('resize-popup', (event, { width, height, resizable }) => {
+    if (popupWindowManager) {
+      popupWindowManager.resizePopup(width, height, resizable);
+    }
+  });
+
   // --- Auth IPC Handler ---
   ipcMain.handle('start-mcp-auth-flow', async (event, { serverId, serverUrl }) => {
       if (!serverId || !serverUrl) {

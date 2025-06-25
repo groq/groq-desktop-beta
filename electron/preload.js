@@ -114,4 +114,16 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   // Other?
+  sendToMain: (channel, data) => ipcRenderer.send(channel, data),
+  
+  // Custom context menu
+  showContextMenu: (items) => ipcRenderer.send('show-context-menu', items),
+
+  // Popup window management
+  resizePopup: (width, height, resizable) => ipcRenderer.invoke('resize-popup', { width, height, resizable }),
+
+  // Tool-related IPC
+  onToolCall: (callback) => {
+    ipcRenderer.on('tool-call', (event, ...args) => callback(...args));
+  },
 }); 

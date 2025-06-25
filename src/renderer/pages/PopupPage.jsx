@@ -20,6 +20,7 @@ const PopupPage = () => {
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
   const [models, setModels] = useState([]);
   const [showContext, setShowContext] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -102,7 +103,15 @@ const PopupPage = () => {
 
   const useContext = () => {
     if (context && context.text) {
-      setInputValue(prev => prev ? `${prev}\n${context.text}` : context.text);
+      let content = context.text;
+      const lines = content.split('\n');
+      const firstContentIndex = lines.findIndex(line => !line.startsWith('Context captured from'));
+
+      if (firstContentIndex !== -1) {
+        content = lines.slice(firstContentIndex).join('\n');
+      }
+      
+      setInputValue(prev => prev ? `${prev}\n${content}` : content);
       setShowContext(false);
       if (textareaRef.current) {
         textareaRef.current.focus();
@@ -112,6 +121,13 @@ const PopupPage = () => {
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
+
+    // Expand the popup on the first message
+    if (!isExpanded) {
+      setIsExpanded(true);
+      // Width, height, resizable
+      window.electron.resizePopup(500, 500, true); 
+    }
 
     // Create message with timestamp for UI
     const userMessage = {
@@ -202,79 +218,96 @@ const PopupPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-50 text-sm font-sans">
+    <div className="flex flex-col h-screen bg-neutral-50 text-sm font-sans overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
       
-      {/* Header with Context */}
-      <div className="px-3 pt-3">
-        {context && showContext && (
-          <ContextPill 
-            title={context.title || 'Captured Context'} 
-            onRemove={() => setShowContext(false)}
-            onClick={useContext}
-          />
-        )}
-      </div>
+      {isExpanded && (
+        <>
+          {/* Header */}
+          <div className="px-3 pt-3 flex justify-between items-center" style={{ WebkitAppRegion: 'drag' }}>
+            <div /> {/* Placeholder to keep layout consistent */}
+            <button 
+              onClick={closePopup} 
+              className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-md"
+              style={{ WebkitAppRegion: 'no-drag' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
-          <div key={index} className={clsx('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-            {message.role === 'assistant' && (
-              <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-                <Bot size={18} className="text-gray-600"/>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ WebkitAppRegion: 'no-drag' }}>
+            {messages.map((message, index) => (
+              <div key={index} className={clsx('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+                {message.role === 'assistant' && (
+                  <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Bot size={18} className="text-gray-600"/>
+                  </div>
+                )}
+                <div className={clsx('max-w-[85%] rounded-2xl px-4 py-2.5', {
+                  'bg-blue-600 text-white': message.role === 'user',
+                  'bg-white border border-gray-100 text-gray-800 shadow-sm': message.role === 'assistant',
+                })}>
+                  <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                    {message.content}
+                    {message.isStreaming && (
+                      <span className="inline-block w-2 h-3 bg-current opacity-75 animate-pulse ml-1.5 rounded-full"></span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <Search size={40} className="mb-2"/>
+                <p>Ask anything to start</p>
               </div>
             )}
-            <div className={clsx('max-w-[85%] rounded-2xl px-4 py-2.5', {
-              'bg-blue-600 text-white': message.role === 'user',
-              'bg-white border border-gray-100 text-gray-800 shadow-sm': message.role === 'assistant',
-            })}>
-              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                {message.content}
-                {message.isStreaming && (
-                  <span className="inline-block w-2 h-3 bg-current opacity-75 animate-pulse ml-1.5 rounded-full"></span>
-                )}
-              </div>
-            </div>
+            <div ref={messagesEndRef} />
           </div>
-        ))}
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <Search size={40} className="mb-2"/>
-            <p>Ask anything to start</p>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+        </>
+      )}
 
       {/* Input */}
-      <div className="px-4 pb-3 pt-2 bg-neutral-50 border-t border-neutral-200">
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex items-end">
-          <div className="flex items-center gap-1">
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+      <div className={clsx("bg-white w-full", {
+        "border-t border-neutral-200": isExpanded,
+        "flex-1 flex items-center": !isExpanded,
+      })}>
+        <div className="p-3 flex flex-col gap-2 w-full">
+          {context && showContext && (
+            <div style={{ WebkitAppRegion: 'no-drag' }} className="mb-1">
+              <ContextPill 
+                title={context.title || 'Captured Context'} 
+                onRemove={() => setShowContext(false)}
+                onClick={useContext}
+              />
+            </div>
+          )}
+          <div className="flex items-end gap-2 w-full">
+            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
               <Plus size={20} />
             </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
               <Globe size={18} />
             </button>
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="Ask anything..."
-            className="flex-1 max-h-40 resize-none bg-transparent border-none focus:ring-0 px-3 text-base placeholder-gray-500"
-            rows={1}
-            disabled={loading}
-          />
-          <div className="flex items-center gap-1">
-             <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+            <textarea
+              ref={textareaRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Ask anything..."
+              className="flex-1 max-h-40 resize-none bg-transparent border-none focus:ring-0 px-2 py-1.5 text-base text-gray-800 placeholder-gray-400"
+              rows={1}
+              disabled={loading}
+              style={{ WebkitAppRegion: 'no-drag' }}
+            />
+            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
                 <Mic size={20} />
             </button>
             <button
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || loading}
-              className="w-9 h-9 flex items-center justify-center bg-black text-white rounded-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              className="w-9 h-9 flex items-center justify-center bg-black text-white rounded-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+              style={{ WebkitAppRegion: 'no-drag' }}
             >
               {loading ? (
                 <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
