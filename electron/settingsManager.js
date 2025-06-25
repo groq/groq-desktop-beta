@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 let appInstance; // To store app instance for userData path
 
 // Helper function to load settings with defaults and validation
@@ -9,8 +12,8 @@ function loadSettings() {
         console.error("App instance not initialized in settingsManager.");
         // Return minimal defaults to avoid crashing downstream logic
         return {
-            GROQ_API_KEY: "<replace me>",
-            model: "llama-3.3-70b-versatile",
+            GROQ_API_KEY: process.env.GROQ_API_KEY || "<replace me>",
+            model: process.env.GROQ_DEFAULT_MODEL || "llama-3.3-70b-versatile",
             temperature: 0.7,
             top_p: 0.95,
             mcpServers: {},
@@ -21,8 +24,8 @@ function loadSettings() {
     const userDataPath = appInstance.getPath('userData');
     const settingsPath = path.join(userDataPath, 'settings.json');
     const defaultSettings = {
-        GROQ_API_KEY: "<replace me>",
-        model: "llama-3.3-70b-versatile",
+        GROQ_API_KEY: process.env.GROQ_API_KEY || "<replace me>",
+        model: process.env.GROQ_DEFAULT_MODEL || "llama-3.3-70b-versatile",
         temperature: 0.7,
         top_p: 0.95,
         mcpServers: {},
@@ -38,14 +41,29 @@ function loadSettings() {
             // Merge defaults and ensure required fields exist, applying defaults if necessary
             const settings = { ...defaultSettings, ...loadedSettings };
 
-            // Explicitly check and apply defaults for potentially missing/undefined fields
-            settings.GROQ_API_KEY = settings.GROQ_API_KEY || defaultSettings.GROQ_API_KEY;
+            // Environment variables take precedence over settings file for API key
+            if (process.env.GROQ_API_KEY) {
+                settings.GROQ_API_KEY = process.env.GROQ_API_KEY;
+                console.log('Using GROQ_API_KEY from environment variable');
+            } else {
+                // Explicitly check and apply defaults for potentially missing/undefined fields
+                settings.GROQ_API_KEY = settings.GROQ_API_KEY || defaultSettings.GROQ_API_KEY;
+            }
+            
             settings.model = settings.model || defaultSettings.model;
             settings.temperature = settings.temperature ?? defaultSettings.temperature; // Use nullish coalescing
             settings.top_p = settings.top_p ?? defaultSettings.top_p;
             settings.mcpServers = settings.mcpServers || defaultSettings.mcpServers;
             settings.disabledMcpServers = settings.disabledMcpServers || defaultSettings.disabledMcpServers;
             settings.customSystemPrompt = settings.customSystemPrompt || defaultSettings.customSystemPrompt;
+
+            // Log API key status for debugging (without revealing the actual key)
+            if (settings.GROQ_API_KEY && settings.GROQ_API_KEY !== "<replace me>") {
+                const keyPreview = settings.GROQ_API_KEY.substring(0, 8) + '...';
+                console.log(`GROQ_API_KEY configured: ${keyPreview}`);
+            } else {
+                console.warn('GROQ_API_KEY not configured - autocomplete will not work');
+            }
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
@@ -55,6 +73,15 @@ function loadSettings() {
             // Create settings file with defaults if it doesn't exist
             fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
             console.log('Settings file created with defaults at:', settingsPath);
+            
+            // Log API key status for new installations
+            if (defaultSettings.GROQ_API_KEY && defaultSettings.GROQ_API_KEY !== "<replace me>") {
+                const keyPreview = defaultSettings.GROQ_API_KEY.substring(0, 8) + '...';
+                console.log(`GROQ_API_KEY configured from environment: ${keyPreview}`);
+            } else {
+                console.warn('GROQ_API_KEY not configured - please set it in .env file or settings');
+            }
+            
             return defaultSettings;
         }
     } catch (error) {

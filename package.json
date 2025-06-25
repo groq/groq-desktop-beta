@@ -33,6 +33,7 @@
     "ansi-to-html": "^0.7.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.5.0",
     "electron-json-storage": "^4.6.0",
     "groq-sdk": "0.16.0",
     "lucide-react": "^0.523.0",

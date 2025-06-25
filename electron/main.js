@@ -27,6 +27,7 @@ const { MODEL_CONTEXT_SIZES } = require('../shared/models.js');
 // Import handlers
 const chatHandler = require('./chatHandler');
 const toolHandler = require('./toolHandler');
+const { getAutocompleteSuggestion } = require('./autocompleteHandler');
 
 // Import new manager modules
 const { initializeSettingsHandlers, loadSettings } = require('./settingsManager');
@@ -223,6 +224,18 @@ app.whenReady().then(async () => {
     modelContextSizes = { 'default': { context: 8192, vision_supported: false } }; // Fallback
   }
 
+  // --- Early IPC Handlers required by popup and renderer before other init --- //
+  ipcMain.handle('get-model-configs', async () => {
+    // Return a copy to prevent accidental modification
+    return JSON.parse(JSON.stringify(modelContextSizes));
+  });
+
+  ipcMain.handle('resize-popup', (event, { width, height, resizable }) => {
+    if (popupWindowManager) {
+      popupWindowManager.resizePopup(width, height, resizable);
+    }
+  });
+
   // Initialize window manager and get the main window instance
   mainWindow = initializeWindowManager(app, screen, shell, BrowserWindow);
   if (!mainWindow) {
@@ -243,15 +256,6 @@ app.whenReady().then(async () => {
     });
   }
 
-  // Initialize context capture system
-  const contextCaptureSuccess = initializeContextCapture();
-  if (contextCaptureSuccess) {
-    console.log('Context capture system initialized successfully');
-    console.log('Press Cmd+G (Mac) or Ctrl+G (Windows/Linux) from any app to open popup with context');
-  } else {
-    console.warn('Context capture system failed to initialize');
-  }
-
   // Initialize settings handlers (needs app)
   initializeSettingsHandlers(ipcMain, app);
 
@@ -266,7 +270,10 @@ app.whenReady().then(async () => {
        console.error("[Main] CRITICAL: mcpManager or retryConnectionAfterAuth not available for AuthManager initialization!");
   }
 
-  // --- Register Core App IPC Handlers --- //
+  // Initialize remaining handlers
+  authManager.initialize(ipcMain, loadSettings);
+
+  // --- Register ALL IPC Handlers BEFORE context capture init --- //
   // Chat completion (use module object)
   ipcMain.on('chat-stream', async (event, messages, model) => {
     const currentSettings = loadSettings();
@@ -274,17 +281,26 @@ app.whenReady().then(async () => {
     chatHandler.handleChatStream(event, messages, model, currentSettings, modelContextSizes, discoveredTools);
   });
 
+  // Handle autocomplete requests
+  ipcMain.handle('autocomplete:get-suggestion', async (event, { text, messages, context }) => {
+    console.log("Autocomplete request received for text:", text.substring(0, 20) + "...");
+    const settings = loadSettings();
+    return await getAutocompleteSuggestion({ text, messages, context, settings });
+  });
+
+  // --- Context Capture IPC Handlers (for modal and popup) ---
+  ipcMain.handle('get-captured-context', async () => {
+    // Return the most recently captured context
+    const context = lastCapturedContext;
+    // Don't clear automatically for popup usage
+    return context;
+  });
+
   // Tool execution (use module object)
   console.log("[Main Init] Registering execute-tool-call...");
   ipcMain.handle('execute-tool-call', async (event, toolCall) => {
     const { discoveredTools, mcpClients } = mcpManager.getMcpState(); // Use module object
     return toolHandler.handleExecuteToolCall(event, toolCall, discoveredTools, mcpClients);
-  });
-
-  // Handler for getting model configurations
-  ipcMain.handle('get-model-configs', async () => {
-      // Return a copy to prevent accidental modification
-      return JSON.parse(JSON.stringify(modelContextSizes));
   });
 
   // --- Context Sharing IPC Handlers (Legacy - for URL/CLI context) ---
@@ -296,14 +312,6 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('clear-context', async () => {
     pendingContext = null;
-  });
-
-  // --- Context Capture IPC Handlers (for modal and popup) ---
-  ipcMain.handle('get-captured-context', async () => {
-    // Return the most recently captured context
-    const context = lastCapturedContext;
-    // Don't clear automatically for popup usage
-    return context;
   });
 
   ipcMain.handle('clear-captured-context', async () => {
@@ -337,12 +345,6 @@ app.whenReady().then(async () => {
     return popupWindowManager ? popupWindowManager.isOpen() : false;
   });
 
-  ipcMain.handle('resize-popup', (event, { width, height, resizable }) => {
-    if (popupWindowManager) {
-      popupWindowManager.resizePopup(width, height, resizable);
-    }
-  });
-
   // --- Auth IPC Handler ---
   ipcMain.handle('start-mcp-auth-flow', async (event, { serverId, serverUrl }) => {
       if (!serverId || !serverUrl) {
@@ -357,6 +359,15 @@ app.whenReady().then(async () => {
           throw error;
       }
   });
+
+  // --- NOW Initialize context capture system AFTER all IPC handlers are registered ---
+  const contextCaptureSuccess = initializeContextCapture();
+  if (contextCaptureSuccess) {
+    console.log('Context capture system initialized successfully');
+    console.log('Press Cmd+G (Mac) or Ctrl+G (Windows/Linux) from any app to open popup with context');
+  } else {
+    console.warn('Context capture system failed to initialize');
+  }
 
   // --- Post-initialization Tasks --- //
   setTimeout(() => {

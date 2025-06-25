@@ -1,5 +1,5 @@
-import { ArrowUp, Loader2, ImagePlus, Hammer } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import { ArrowUp, Loader2, ImagePlus, Hammer, Upload } from "lucide-react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import TextAreaAutosize from "react-textarea-autosize";
 import { 
 	Select, 
@@ -10,6 +10,7 @@ import {
 } from "./ui/select";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
+import { ChatContext } from "../context/ChatContext";
 
 function ChatInput({
 	onSendMessage,
@@ -21,12 +22,65 @@ function ChatInput({
 	onOpenMcpTools,
 }) {
 	const [message, setMessage] = useState("");
+	const [suggestion, setSuggestion] = useState("");
+	const suggestionTimeout = useRef(null);
+	const { messages, activeContext } = useContext(ChatContext);
+
 	const [files, setFiles] = useState([]); // Changed from images to files to handle all file types
 	const [isDragOver, setIsDragOver] = useState(false);
 	const [fullScreenImage, setFullScreenImage] = useState(null);
 	const textareaRef = useRef(null);
 	const fileInputRef = useRef(null); // Ref for file input
 	const prevLoadingRef = useRef(loading);
+
+	// Fetch autocomplete suggestion
+	useEffect(() => {
+		// Clear any existing timeout
+		if (suggestionTimeout.current) {
+			clearTimeout(suggestionTimeout.current);
+		}
+
+		// Clear suggestion immediately when typing continues
+		if (suggestion) setSuggestion("");
+
+		// Only trigger autocomplete for reasonable text lengths and when not loading
+		if (message.trim().length >= 5 && !loading) {
+			suggestionTimeout.current = setTimeout(async () => {
+				try {
+					const result = await window.electron.getAutocompleteSuggestion({
+						text: message,
+						messages: messages || [], // from ChatContext
+						context: activeContext?.text || '', // from ChatContext
+					});
+
+					// Only show valid, single-line suggestions that aren't too long
+					if (result && typeof result === 'string' && result.trim() && !result.includes("\n")) {
+						const trimmedResult = result.trim();
+						// Reasonable length limit to prevent UI issues
+						if (trimmedResult.length <= 100 && trimmedResult.length > 0) {
+							// Ensure the suggestion doesn't start with the same text
+							if (!trimmedResult.toLowerCase().startsWith(message.toLowerCase())) {
+								setSuggestion(trimmedResult);
+							}
+						}
+					}
+				} catch (error) {
+					console.error("Autocomplete error:", error);
+					// Don't show error to user, just silently fail
+					setSuggestion("");
+				}
+			}, 400); // Slightly increased delay to reduce API calls
+		} else {
+			setSuggestion("");
+		}
+
+		// Cleanup on unmount
+		return () => {
+			if (suggestionTimeout.current) {
+				clearTimeout(suggestionTimeout.current);
+			}
+		};
+	}, [message, loading, messages, activeContext]);
 
 	// Function to handle file selection (images and other files)
 	const handleFileChange = (e) => {
@@ -224,10 +278,26 @@ function ChatInput({
 			onSendMessage(contentToSend);
 			setMessage("");
 			setFiles([]); // Clear files after sending
+			setSuggestion(""); // Clear suggestion on send
 		}
 	};
 
 	const handleKeyDown = (e) => {
+		// Accept suggestion on Tab
+		if (e.key === "Tab" && suggestion) {
+			e.preventDefault();
+			setMessage(message + suggestion);
+			setSuggestion("");
+			return; // Prevent other key handlers from firing
+		}
+
+		// Clear suggestion on escape
+		if (e.key === "Escape" && suggestion) {
+			e.preventDefault();
+			setSuggestion("");
+			return;
+		}
+
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			handleSubmit(e);
@@ -319,11 +389,18 @@ function ChatInput({
 							rows={1}
 							disabled={loading}
 						/>
+						{/* Autocomplete suggestion overlay */}
+						{suggestion && !loading && (
+							<div className="absolute inset-0 px-4 py-3 pointer-events-none overflow-hidden whitespace-pre-wrap">
+								<span className="invisible">{message}</span>
+								<span className="text-muted-foreground/60 bg-muted-foreground/5 px-1 rounded">{suggestion}</span>
+							</div>
+						)}
 						{/* Drag overlay */}
 						{isDragOver && (
 							<div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-2xl flex items-center justify-center pointer-events-none">
 								<div className="text-primary font-medium flex items-center gap-2">
-									<Upload className="w-5 h-5" />
+									<ImagePlus className="w-5 h-5" />
 									Drop files here
 								</div>
 							</div>
@@ -356,9 +433,9 @@ function ChatInput({
 								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
 								title={visionSupported ? "Upload file or image (max 5)" : "Upload files (images require vision-capable model)"}
 								disabled={loading}
-												>
-						<ImagePlus className="w-4 h-4 mr-2" />
-						Upload
+							>
+								<ImagePlus className="w-4 h-4 mr-2" />
+								Upload
 							</Button>
 						)}
 						<input
@@ -388,19 +465,29 @@ function ChatInput({
 						)}
 					</div>
 
-					{/* Model Selector */}
-					<Select value={selectedModel} onValueChange={onModelChange}>
-						<SelectTrigger className="w-48 h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
-							<SelectValue placeholder="Select model" className="text-foreground" />
-						</SelectTrigger>
-						<SelectContent className="rounded-xl">
-							{models.map(model => (
-								<SelectItem key={model} value={model} className="rounded-lg text-foreground">
-									{model}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex items-center gap-3">
+						{/* Autocomplete hint */}
+						{suggestion && !loading && (
+							<div className="text-xs text-muted-foreground flex items-center gap-1">
+								<kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Tab</kbd>
+								to accept
+							</div>
+						)}
+						
+						{/* Model Selector */}
+						<Select value={selectedModel} onValueChange={onModelChange}>
+							<SelectTrigger className="w-48 h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
+								<SelectValue placeholder="Select model" className="text-foreground" />
+							</SelectTrigger>
+							<SelectContent className="rounded-xl">
+								{models.map(model => (
+									<SelectItem key={model} value={model} className="rounded-lg text-foreground">
+										{model}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
 				</div>
 			</div>
 		</form>

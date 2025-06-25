@@ -32,6 +32,9 @@ const PopupPage = () => {
   const [files, setFiles] = useState([]);
   const [fullScreenImage, setFullScreenImage] = useState(null);
   const [visionSupported, setVisionSupported] = useState(false);
+  // Autocomplete state
+  const [suggestion, setSuggestion] = useState('');
+  const suggestionTimeout = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -74,6 +77,55 @@ const PopupPage = () => {
       textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
     }
   }, [inputValue]);
+
+  // Fetch autocomplete suggestion
+  useEffect(() => {
+    // Clear any existing timeout
+    if (suggestionTimeout.current) {
+      clearTimeout(suggestionTimeout.current);
+    }
+
+    // Clear suggestion immediately when typing continues
+    if (suggestion) setSuggestion('');
+
+    // Only trigger autocomplete for reasonable text lengths and when not loading
+    if (inputValue.trim().length >= 5 && !loading) {
+      suggestionTimeout.current = setTimeout(async () => {
+        try {
+          const result = await window.electron.getAutocompleteSuggestion({
+            text: inputValue,
+            messages: messages || [],
+            context: context?.text || '',
+          });
+
+          // Only show valid, single-line suggestions that aren't too long
+          if (result && typeof result === 'string' && result.trim() && !result.includes('\n')) {
+            const trimmedResult = result.trim();
+            // Reasonable length limit to prevent UI issues
+            if (trimmedResult.length <= 100 && trimmedResult.length > 0) {
+              // Ensure the suggestion doesn't start with the same text
+              if (!trimmedResult.toLowerCase().startsWith(inputValue.toLowerCase())) {
+                setSuggestion(trimmedResult);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Autocomplete error:', error);
+          // Don't show error to user, just silently fail
+          setSuggestion('');
+        }
+      }, 400); // Slightly increased delay to reduce API calls
+    } else {
+      setSuggestion('');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (suggestionTimeout.current) {
+        clearTimeout(suggestionTimeout.current);
+      }
+    };
+  }, [inputValue, loading, messages, context]);
 
   // Dynamic popup resizing
   useEffect(() => {
@@ -141,6 +193,21 @@ const PopupPage = () => {
   };
 
   const handleKeyPress = (e) => {
+    // Accept suggestion on Tab
+    if (e.key === 'Tab' && suggestion) {
+      e.preventDefault();
+      setInputValue(inputValue + suggestion);
+      setSuggestion('');
+      return; // Prevent other key handlers from firing
+    }
+
+    // Clear suggestion on escape, but only if there's a suggestion
+    if (e.key === 'Escape' && suggestion) {
+      e.preventDefault();
+      setSuggestion('');
+      return;
+    }
+
     if (e.key === 'Escape') {
       closePopup();
     } else if (e.key === 'Enter' && !e.shiftKey) {
@@ -241,6 +308,7 @@ const PopupPage = () => {
     setMessages(prev => [...prev, userMessageForUi]);
     setInputValue('');
     setFiles([]); // Clear files after sending
+    setSuggestion(''); // Clear suggestion on send
     setLoading(true);
     
     // Create message for model
@@ -559,6 +627,14 @@ const PopupPage = () => {
             </div>
           )}
 
+          {/* Autocomplete hint */}
+          {suggestion && !loading && (
+            <div className="text-xs text-muted-foreground flex items-center gap-1 px-1">
+              <kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Tab</kbd>
+              to accept
+            </div>
+          )}
+
           {/* Input Row */}
           <div className="flex items-end gap-2 w-full">
             {files.length < 5 && (
@@ -612,6 +688,13 @@ const PopupPage = () => {
                 disabled={loading}
                 style={{ WebkitAppRegion: 'no-drag' }}
               />
+              {/* Autocomplete suggestion overlay */}
+              {suggestion && !loading && (
+                <div className="absolute inset-0 px-3 py-3 pointer-events-none overflow-hidden whitespace-pre-wrap rounded-2xl">
+                  <span className="invisible">{inputValue}</span>
+                  <span className="text-muted-foreground/60 bg-muted-foreground/5 px-1 rounded">{suggestion}</span>
+                </div>
+              )}
               <Button
                 onClick={handleSendMessage}
                 disabled={!inputValue.trim() || loading}

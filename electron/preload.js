@@ -126,4 +126,12 @@ contextBridge.exposeInMainWorld('electron', {
   onToolCall: (callback) => {
     ipcRenderer.on('tool-call', (event, ...args) => callback(...args));
   },
+
+  // Autocomplete
+  getAutocompleteSuggestion: (options) => ipcRenderer.invoke('autocomplete:get-suggestion', options),
+
+  // Generic IPC renderer access (kept for backward compatibility)
+  ipcRenderer: {
+    invoke: (channel, data) => ipcRenderer.invoke(channel, data),
+  },
 }); 
