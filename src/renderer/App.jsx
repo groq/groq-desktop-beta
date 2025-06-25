@@ -8,7 +8,10 @@ import ContextDisplay from './components/ContextDisplay';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings } from 'lucide-react';
+import { Settings, Zap, Brain, MessageSquare } from 'lucide-react';
+import { Card, CardContent } from './components/ui/card';
+import { Button } from './components/ui/button';
+import { Badge } from './components/ui/badge';
 
 // LocalStorage keys
 const TOOL_APPROVAL_PREFIX = 'tool_approval_';
@@ -431,12 +434,13 @@ function App() {
             });
 
             streamHandler.onError(({ error }) => {
-                console.error('Stream error:', error);
+                console.error('Stream error received:', error);
+                console.log('Error details:', { error });
                 // Replace placeholder with error
                 setMessages(prev => {
                    const newMessages = [...prev];
                    const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
-                   const errorMsg = { role: 'assistant', content: `Stream Error: ${error}`, isStreaming: false };
+                   const errorMsg = { role: 'assistant', content: `Error: ${error}`, isStreaming: false };
                    if (idx !== -1) {
                        newMessages[idx] = errorMsg;
                    } else {
@@ -818,45 +822,103 @@ function App() {
     }
   };
   return (
-    <>
-    <div className="flex flex-col h-screen bg-white">
-      <header className="flex justify-between items-center p-6 sticky top-0 z-10 bg-gray/200 shadow-md">
-        <h1 className="text-2xl font-montserrat font-bold text-black">
-          Groq
-        </h1>
-        <Link to="/settings">
-          <Settings className="pl-2 text-gray-400 hover:text-gray-600 transition-colors mt-[1px] mr-5" size={30}  />
-        </Link>
-      </header>
-      <div className="flex-1 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-3xl">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center">
-              <h1 className="text-4xl font-bold mb-8 text-white">
-                <span className="text-primary font-montserrat"> Build Fast</span>
-              </h1>
-                <ChatInput
-                  onSendMessage={handleSendMessage}
-                  loading={loading}
-                  visionSupported={visionSupported}
-                  models={models}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                />
-              
+    <div className="flex flex-col h-screen bg-background">
+      {/* Modern Sticky Header */}
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
+        <div className="flex h-16 items-center justify-between px-6 max-w-full">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <img 
+                src="/groqLogo.png" 
+                alt="Groq Logo" 
+                className="h-8 w-auto"
+              />
             </div>
-          ) : (
-            <>
-              <div className="flex flex-col h-full">
-                <div className="overflow-y-auto max-h-[calc(100vh-300px)] mb-4">
-                  <MessageList 
-                    messages={messages} 
-                    onToolCallExecute={executeToolCall} 
-                    onRemoveLastMessage={handleRemoveLastMessage} 
-                  />
-                  <div ref={messagesEndRef} />
+            
+            {/* Status Badge */}
+            {mcpTools.length > 0 && (
+              <Badge variant="secondary" className="ml-4">
+                <Zap className="w-3 h-3 mr-1" />
+                {mcpTools.length} tools
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {/* New Chat Button - only show when there are messages */}
+            {messages.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setMessages([])}
+                className="text-foreground hover:text-foreground"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                New Chat
+              </Button>
+            )}
+            
+            <Link to="/settings">
+              <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="container px-6 py-8">
+            <div className="max-w-4xl mx-auto h-full">
+            {messages.length === 0 ? (
+              /* Welcome Screen */
+              <div className="flex flex-col items-center justify-center h-full space-y-8">
+                <div className="text-center space-y-4">
+                  <h1 className="text-4xl font-bold text-orange-500">
+                    Build Fast
+                  </h1>
+                  <p className="text-xl text-muted-foreground max-w-2xl">
+                    Chat with AI models powered by Groq's lightning-fast inference engine
+                  </p>
                 </div>
-                <div className="mt-auto sticky bottom-0">
+
+                {/* Feature Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <MessageSquare className="h-8 w-8 text-primary mx-auto mb-3" />
+                      <h3 className="font-semibold mb-2">Smart Conversations</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Advanced AI models with context awareness
+                      </p>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <Zap className="h-8 w-8 text-primary mx-auto mb-3" />
+                      <h3 className="font-semibold mb-2">Lightning Fast</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Powered by Groq's ultra-fast inference
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <Settings className="h-8 w-8 text-primary mx-auto mb-3" />
+                      <h3 className="font-semibold mb-2">MCP Tools</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Extensible with MCP server integration
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Chat Input */}
+                <div className="w-full max-w-2xl">
                   <ChatInput
                     onSendMessage={handleSendMessage}
                     loading={loading}
@@ -864,31 +926,57 @@ function App() {
                     models={models}
                     selectedModel={selectedModel}
                     onModelChange={setSelectedModel}
+                    onOpenMcpTools={() => setIsToolsPanelOpen(true)}
                   />
                 </div>
               </div>
-            </>
-          )}
+            ) : (
+              /* Chat View */
+              <div className="flex flex-col h-full">
+                <div className="flex-1 overflow-y-auto mb-6">
+                  <MessageList 
+                    messages={messages} 
+                    onToolCallExecute={executeToolCall} 
+                    onRemoveLastMessage={handleRemoveLastMessage} 
+                  />
+                  <div ref={messagesEndRef} />
+                </div>
+                
+                <div className="border-t bg-background/95 backdrop-blur pt-6">
+                  <ChatInput
+                    onSendMessage={handleSendMessage}
+                    loading={loading}
+                    visionSupported={visionSupported}
+                    models={models}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    onOpenMcpTools={() => setIsToolsPanelOpen(true)}
+                  />
+                </div>
+              </div>
+            )}
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Modals */}
       {isToolsPanelOpen && (
         <ToolsPanel
           tools={mcpTools}
           onClose={() => setIsToolsPanelOpen(false)}
-          onDisconnectServer={disconnectMcpServer}
-          onReconnectServer={reconnectMcpServer}
+                     onDisconnectServer={disconnectMcpServer}
+           onReconnectServer={reconnectMcpServer}
         />
       )}
 
       {pendingApprovalCall && (
         <ToolApprovalModal
           toolCall={pendingApprovalCall}
-          onApprove={handleToolApproval}
+                     onApprove={handleToolApproval}
         />
       )}
     </div>
-    </>
   );
 }
 

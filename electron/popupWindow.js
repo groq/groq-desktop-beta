@@ -38,18 +38,15 @@ class PopupWindowManager {
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      titleBarStyle: 'hiddenInset',
+      frame: false, // Remove frame to eliminate window controls
+      transparent: true,
+      hasShadow: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
         enableRemoteModule: false
-      },
-      // Make it look like a popup
-      frame: false,
-      transparent: true,
-      hasShadow: true,
-      vibrancy: process.platform === 'darwin' ? 'under-window' : undefined
+      }
     });
 
     // Determine URL based on environment

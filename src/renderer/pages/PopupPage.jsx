@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Globe, Search, ArrowUp, Mic, X, FileText, Bot } from 'lucide-react';
-import clsx from 'clsx';
+import { Upload, Hammer, Search, ArrowUp, Mic, X, FileText, Bot, Send } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Textarea } from '../components/ui/textarea';
+import { cn } from '../lib/utils';
 
 const ContextPill = ({ title, onRemove }) => (
-  <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-800 shadow-sm">
-    <FileText size={14} className="text-gray-500" />
-    <span>{title}</span>
-    <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-gray-400 hover:text-gray-600">
-      <X size={14} />
-    </button>
-  </div>
+  <Badge variant="outline" className="inline-flex items-center gap-2 bg-background/50 backdrop-blur-sm border-border/50 text-foreground shadow-sm">
+    <FileText size={12} className="text-muted-foreground" />
+    <span className="text-xs font-medium text-foreground">{title}</span>
+    <Button 
+      variant="ghost" 
+      size="icon" 
+      onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+      className="h-4 w-4 p-0 hover:bg-destructive/20 hover:text-destructive"
+    >
+      <X size={10} />
+    </Button>
+  </Badge>
 );
 
 const PopupPage = () => {
@@ -58,8 +66,7 @@ const PopupPage = () => {
     if (textarea) {
       textarea.style.height = 'auto';
       const scrollHeight = textarea.scrollHeight;
-      //-3 for border and padding
-      textarea.style.height = `${scrollHeight}px`;
+      textarea.style.height = `${Math.min(scrollHeight, 120)}px`;
     }
   }, [inputValue]);
 
@@ -107,8 +114,7 @@ const PopupPage = () => {
     // Expand the popup on the first message
     if (!isExpanded) {
       setIsExpanded(true);
-      // Width, height, resizable
-      window.electron.resizePopup(500, 500, true); 
+      window.electron.resizePopup(480, 500, true); 
     }
     
     const uiMessageContent = inputValue.trim();
@@ -158,7 +164,7 @@ const PopupPage = () => {
       
       setMessages(prev => [...prev, assistantPlaceholder]);
 
-      // Start streaming - send messages without timestamps
+      // Start streaming
       const streamHandler = window.electron.startChatStream([...messages, userMessageForModel], selectedModel);
       
       let finalContent = '';
@@ -227,48 +233,69 @@ const PopupPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen text-sm overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
+    <div className="flex flex-col h-screen bg-background backdrop-blur-xl rounded-3xl shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300" style={{ WebkitAppRegion: 'drag' }}>
+      
+      {/* Exit Button - Always in top right */}
+      {!isExpanded && (
+        <div className="absolute top-3 right-3 z-10" style={{ WebkitAppRegion: 'no-drag' }}>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-lg transition-all duration-200" 
+            onClick={closePopup}
+            title="Close"
+          >
+            <X size={14} />
+          </Button>
+        </div>
+      )}
       
       {isExpanded && (
         <>
-          {/* Header */}
-          <div className="px-3 pt-3 flex justify-between items-center" style={{ WebkitAppRegion: 'drag' }}>
-            <div /> {/* Placeholder to keep layout consistent */}
-            <button 
+          {/* Header - Only shows when expanded */}
+          <div className="px-4 pt-3 pb-2 flex justify-between items-center border-b border-border/30" style={{ WebkitAppRegion: 'drag' }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-xs font-medium text-foreground">Groq Chat</span>
+            </div>
+            <Button 
+              variant="ghost"
+              size="icon"
               onClick={closePopup} 
-              className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-md"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
               style={{ WebkitAppRegion: 'no-drag' }}
             >
-              <X size={16} />
-            </button>
+              <X size={14} />
+            </Button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ WebkitAppRegion: 'no-drag' }}>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 rounded-t-3xl" style={{ WebkitAppRegion: 'no-drag' }}>
             {messages.map((message, index) => (
-              <div key={index} className={clsx('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+              <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                 {message.role === 'assistant' && (
-                  <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Bot size={18} className="text-gray-600"/>
+                  <div className="w-8 h-8 bg-primary/10 rounded-2xl flex items-center justify-center flex-shrink-0 border border-border/50 shadow-sm">
+                    <Bot size={16} className="text-primary"/>
                   </div>
                 )}
-                <div className={clsx('max-w-[85%] rounded-2xl px-4 py-2.5', {
-                  'bg-blue-600 text-white': message.role === 'user',
-                  'bg-white border border-gray-100 text-gray-800 shadow-sm': message.role === 'assistant',
+                <div className={cn('max-w-[85%] rounded-3xl px-4 py-3 shadow-lg border backdrop-blur-sm transition-all duration-200 hover:shadow-xl', {
+                  'bg-primary text-primary-foreground border-primary/20 shadow-primary/20': message.role === 'user',
+                  'bg-card/80 text-card-foreground border-border/50 shadow-border/10': message.role === 'assistant',
                 })}>
                   <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {message.content}
                     {message.isStreaming && (
-                      <span className="inline-block w-2 h-3 bg-current opacity-75 animate-pulse ml-1.5 rounded-full"></span>
+                      <span className="inline-block w-2 h-4 bg-current opacity-75 animate-pulse ml-1 rounded-sm"></span>
                     )}
                   </div>
                 </div>
               </div>
             ))}
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <Search size={40} className="mb-2"/>
-                <p>Ask anything to start</p>
+              <div className="flex flex-col items-center justify-center h-full text-foreground">
+                <Search size={32} className="mb-3 opacity-50"/>
+                <p className="text-sm font-medium">Ask anything to start</p>
+                <p className="text-xs opacity-75 mt-1">Press Esc to close</p>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -276,56 +303,80 @@ const PopupPage = () => {
         </>
       )}
 
-      {/* Input */}
-      <div className={clsx("bg-white w-full", {
-        "border-t border-neutral-200": isExpanded,
-        "flex-1 flex items-center": !isExpanded,
+      {/* Input Area */}
+      <div className={cn("bg-gradient-to-t from-card/60 to-card/40 backdrop-blur-sm border-t border-border/30 rounded-b-3xl", {
+        "flex-1 flex items-center rounded-3xl": !isExpanded,
       })}>
-        <div className="p-3 flex flex-col gap-2 w-full">
+        <div className="p-4 w-full space-y-3">
+          {/* Context Pill */}
           {context && showContext && (
-            <div style={{ WebkitAppRegion: 'no-drag' }} className="mb-1">
+            <div className="flex" style={{ WebkitAppRegion: 'no-drag' }}>
               <ContextPill 
                 title={context.title || 'Captured Context'} 
                 onRemove={() => setShowContext(false)}
               />
             </div>
           )}
+          
+          {/* Input Row */}
           <div className="flex items-end gap-2 w-full">
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
-              <Plus size={20} />
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
-              <Globe size={18} />
-            </button>
-            <textarea
-              ref={textareaRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Ask anything..."
-              className="flex-1 max-h-40 resize-none bg-transparent border-none focus:ring-0 px-2 py-1.5 text-base text-gray-800 placeholder-gray-400"
-              rows={1}
-              disabled={loading}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 rounded-xl transition-all duration-200 hover:scale-105" 
               style={{ WebkitAppRegion: 'no-drag' }}
-            />
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
-                <Mic size={20} />
-            </button>
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || loading}
-              className="w-9 h-9 flex items-center justify-center bg-black text-white rounded-full disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-              style={{ WebkitAppRegion: 'no-drag' }}
+              title="Upload file or image"
             >
-              {loading ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <ArrowUp size={20} />
-              )}
-            </button>
+              <Upload size={18} />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 rounded-xl transition-all duration-200 hover:scale-105" 
+              style={{ WebkitAppRegion: 'no-drag' }}
+              title="Configure MCP servers"
+            >
+              <Hammer size={16} />
+            </Button>
+
+            
+            <div className="flex-1 relative">
+              <Textarea
+                ref={textareaRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder="Ask anything..."
+                className="min-h-[44px] max-h-[120px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:border-ring/50 focus:ring-ring/20 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
+                rows={1}
+                disabled={loading}
+                style={{ WebkitAppRegion: 'no-drag' }}
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || loading}
+                size="icon"
+                className="absolute right-2 bottom-2 h-8 w-8 rounded-xl bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105"
+                style={{ WebkitAppRegion: 'no-drag' }}
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Send size={14} />
+                )}
+              </Button>
+            </div>
+            
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 rounded-xl transition-all duration-200 hover:scale-105" 
+              style={{ WebkitAppRegion: 'no-drag' }}
+              title="Voice input"
+            >
+              <Mic size={16} />
+            </Button>
           </div>
         </div>
       </div>

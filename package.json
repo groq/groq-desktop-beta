@@ -6,15 +6,15 @@
   "type": "commonjs",
   "packageManager": "pnpm@10.9.0",
   "scripts": {
-    "dev": "concurrently \"pnpm dev:vite\" \"pnpm dev:electron\"",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "build": "vite build",
     "build:electron": "electron-builder",
-    "dist": "pnpm build && pnpm build:electron",
-    "dist:mac": "pnpm build && electron-builder --mac",
-    "dist:win": "pnpm build && electron-builder --win",
-    "dist:linux": "pnpm build && electron-builder --linux",
+    "dist": "npm run build && npm run build:electron",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
     "test:platforms": "./test-cross-platform.sh",
     "test:paths": "node test-paths.js"
   },
@@ -28,7 +28,9 @@
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "@radix-ui/react-slot": "^1.2.3",
     "ansi-to-html": "^0.7.2",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-json-storage": "^4.6.0",
     "groq-sdk": "0.16.0",
@@ -41,6 +43,7 @@
     "react-syntax-highlighter": "^15.6.1",
     "react-textarea-autosize": "^8.5.9",
     "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.3.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
