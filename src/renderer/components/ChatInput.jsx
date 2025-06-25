@@ -1,4 +1,4 @@
-import { ArrowUp, Loader2, ImagePlus, Hammer, Upload } from "lucide-react";
+import { ArrowUp, Loader2, ImagePlus, Hammer, Upload, Zap, ZapOff } from "lucide-react";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import TextAreaAutosize from "react-textarea-autosize";
 import { 
@@ -23,6 +23,7 @@ function ChatInput({
 }) {
 	const [message, setMessage] = useState("");
 	const [suggestion, setSuggestion] = useState("");
+	const [autocompleteEnabled, setAutocompleteEnabled] = useState(true);
 	const suggestionTimeout = useRef(null);
 	const { messages, activeContext } = useContext(ChatContext);
 
@@ -43,8 +44,8 @@ function ChatInput({
 		// Clear suggestion immediately when typing continues
 		if (suggestion) setSuggestion("");
 
-		// Only trigger autocomplete for reasonable text lengths and when not loading
-		if (message.trim().length >= 5 && !loading) {
+		// Only trigger autocomplete if enabled, for reasonable text lengths and when not loading
+		if (autocompleteEnabled && message.trim().length >= 5 && !loading) {
 			suggestionTimeout.current = setTimeout(async () => {
 				try {
 					const result = await window.electron.getAutocompleteSuggestion({
@@ -80,7 +81,7 @@ function ChatInput({
 				clearTimeout(suggestionTimeout.current);
 			}
 		};
-	}, [message, loading, messages, activeContext]);
+	}, [message, loading, messages, activeContext, autocompleteEnabled]);
 
 	// Function to handle file selection (images and other files)
 	const handleFileChange = (e) => {
@@ -283,8 +284,8 @@ function ChatInput({
 	};
 
 	const handleKeyDown = (e) => {
-		// Accept suggestion on Tab
-		if (e.key === "Tab" && suggestion) {
+		// Accept suggestion on Tab (only if autocomplete is enabled)
+		if (e.key === "Tab" && autocompleteEnabled && suggestion) {
 			e.preventDefault();
 			setMessage(message + suggestion);
 			setSuggestion("");
@@ -390,7 +391,7 @@ function ChatInput({
 							disabled={loading}
 						/>
 						{/* Autocomplete suggestion overlay */}
-						{suggestion && !loading && (
+						{autocompleteEnabled && suggestion && !loading && (
 							<div className="absolute inset-0 px-4 py-3 pointer-events-none overflow-hidden whitespace-pre-wrap">
 								<span className="invisible">{message}</span>
 								<span className="text-muted-foreground/60 bg-muted-foreground/5 px-1 rounded">{suggestion}</span>
@@ -463,11 +464,30 @@ function ChatInput({
 								Tools
 							</Button>
 						)}
+
+						{/* Autocomplete Toggle Button */}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
+							className={cn(
+								"transition-colors rounded-xl",
+								autocompleteEnabled 
+									? "text-green-600 hover:text-green-700 hover:bg-green-100/50" 
+									: "text-muted-foreground hover:text-foreground"
+							)}
+							title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
+							disabled={loading}
+						>
+							{autocompleteEnabled ? <Zap className="w-4 h-4 mr-2" /> : <ZapOff className="w-4 h-4 mr-2" />}
+							Auto
+						</Button>
 					</div>
 
 					<div className="flex items-center gap-3">
 						{/* Autocomplete hint */}
-						{suggestion && !loading && (
+						{autocompleteEnabled && suggestion && !loading && (
 							<div className="text-xs text-muted-foreground flex items-center gap-1">
 								<kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Tab</kbd>
 								to accept

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ImagePlus, Hammer, Search, ArrowUp, Mic, X, FileText, Bot, Send } from 'lucide-react';
+import { ImagePlus, Hammer, Search, ArrowUp, Mic, X, FileText, Bot, Send, Zap, ZapOff } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
@@ -34,6 +34,7 @@ const PopupPage = () => {
   const [visionSupported, setVisionSupported] = useState(false);
   // Autocomplete state
   const [suggestion, setSuggestion] = useState('');
+  const [autocompleteEnabled, setAutocompleteEnabled] = useState(true);
   const suggestionTimeout = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -88,8 +89,8 @@ const PopupPage = () => {
     // Clear suggestion immediately when typing continues
     if (suggestion) setSuggestion('');
 
-    // Only trigger autocomplete for reasonable text lengths and when not loading
-    if (inputValue.trim().length >= 5 && !loading) {
+    // Only trigger autocomplete if enabled, for reasonable text lengths and when not loading
+    if (autocompleteEnabled && inputValue.length >= 5 && !loading) {
       suggestionTimeout.current = setTimeout(async () => {
         try {
           const result = await window.electron.getAutocompleteSuggestion({
@@ -99,13 +100,13 @@ const PopupPage = () => {
           });
 
           // Only show valid, single-line suggestions that aren't too long
-          if (result && typeof result === 'string' && result.trim() && !result.includes('\n')) {
-            const trimmedResult = result.trim();
+          if (result && typeof result === 'string' && result.length > 0 && !result.includes('\n')) {
+            // Don't trim to preserve leading/trailing spaces that might be intentional
             // Reasonable length limit to prevent UI issues
-            if (trimmedResult.length <= 100 && trimmedResult.length > 0) {
+            if (result.length <= 100) {
               // Ensure the suggestion doesn't start with the same text
-              if (!trimmedResult.toLowerCase().startsWith(inputValue.toLowerCase())) {
-                setSuggestion(trimmedResult);
+              if (!result.toLowerCase().startsWith(inputValue.toLowerCase())) {
+                setSuggestion(result);
               }
             }
           }
@@ -125,7 +126,7 @@ const PopupPage = () => {
         clearTimeout(suggestionTimeout.current);
       }
     };
-  }, [inputValue, loading, messages, context]);
+  }, [inputValue, loading, messages, context, autocompleteEnabled]);
 
   // Dynamic popup resizing
   useEffect(() => {
@@ -193,8 +194,8 @@ const PopupPage = () => {
   };
 
   const handleKeyPress = (e) => {
-    // Accept suggestion on Tab
-    if (e.key === 'Tab' && suggestion) {
+    // Accept suggestion on Tab (only if autocomplete is enabled)
+    if (e.key === 'Tab' && autocompleteEnabled && suggestion) {
       e.preventDefault();
       setInputValue(inputValue + suggestion);
       setSuggestion('');
@@ -628,7 +629,7 @@ const PopupPage = () => {
           )}
 
           {/* Autocomplete hint */}
-          {suggestion && !loading && (
+          {autocompleteEnabled && suggestion && !loading && (
             <div className="text-xs text-muted-foreground flex items-center gap-1 px-1">
               <kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Tab</kbd>
               to accept
@@ -636,7 +637,7 @@ const PopupPage = () => {
           )}
 
           {/* Input Row */}
-          <div className="flex items-end gap-2 w-full">
+          <div className="flex items-end gap-1 w-full">
             {files.length < 5 && (
               <Button 
                 variant="ghost" 
@@ -675,6 +676,22 @@ const PopupPage = () => {
               <Hammer size={16} />
             </Button>
 
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
+              className={cn(
+                "h-9 w-9 shrink-0 rounded-xl transition-all duration-200 hover:scale-105",
+                autocompleteEnabled 
+                  ? "text-green-600 hover:text-green-700 hover:bg-green-100/50" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )}
+              style={{ WebkitAppRegion: 'no-drag' }}
+              title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
+            >
+              {autocompleteEnabled ? <Zap size={16} /> : <ZapOff size={16} />}
+            </Button>
+
             
             <div className="flex-1 relative">
               <Textarea
@@ -689,8 +706,8 @@ const PopupPage = () => {
                 style={{ WebkitAppRegion: 'no-drag' }}
               />
               {/* Autocomplete suggestion overlay */}
-              {suggestion && !loading && (
-                <div className="absolute inset-0 px-3 py-3 pointer-events-none overflow-hidden whitespace-pre-wrap rounded-2xl">
+              {autocompleteEnabled && suggestion && !loading && (
+                <div className="absolute inset-0 px-3 py-2 pointer-events-none overflow-hidden whitespace-pre-wrap rounded-2xl text-sm leading-relaxed">
                   <span className="invisible">{inputValue}</span>
                   <span className="text-muted-foreground/60 bg-muted-foreground/5 px-1 rounded">{suggestion}</span>
                 </div>
@@ -713,9 +730,10 @@ const PopupPage = () => {
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 rounded-xl transition-all duration-200 hover:scale-105" 
+              disabled
+              className="h-9 w-9 text-muted-foreground/50 hover:text-muted-foreground/50 hover:bg-transparent shrink-0 rounded-xl transition-all duration-200 cursor-not-allowed" 
               style={{ WebkitAppRegion: 'no-drag' }}
-              title="Voice input"
+              title="Voice input (coming soon)"
             >
               <Mic size={16} />
             </Button>
