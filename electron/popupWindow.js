@@ -61,6 +61,9 @@ class PopupWindowManager {
 
     // Handle window events
     this.popupWindow.once('ready-to-show', () => {
+      if (!this.popupWindow) {
+        return; // Window was closed before it could be shown
+      }
       this.popupWindow.show();
       this.popupWindow.focus();
       this.isPopupOpen = true;
@@ -77,10 +80,12 @@ class PopupWindowManager {
     });
 
     // Handle popup losing focus (optional: could auto-close)
+    /*
     this.popupWindow.on('blur', () => {
       // Optionally auto-close when losing focus
       this.closePopup();
     });
+    */
 
     // Handle escape key to close
     this.popupWindow.webContents.on('before-input-event', (event, input) => {

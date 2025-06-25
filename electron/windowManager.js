@@ -27,6 +27,10 @@ function createWindow(screen, BrowserWindow) {
     mainWindow.webContents.openDevTools();
   }
 
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   console.log("Main window created.");
   return mainWindow;
 }
@@ -67,11 +71,13 @@ function initializeWindowManager(app, screen, shell, BrowserWindow) {
     });
 
     // App lifecycle events handled here
+    /*
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') {
         app.quit();
       }
     });
+    */
 
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the

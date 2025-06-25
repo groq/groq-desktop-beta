@@ -138,7 +138,7 @@ function initializeContextCapture() {
     }
     
     // Also notify main window if it exists (for legacy support)
-    if (mainWindow && mainWindow.webContents) {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
       mainWindow.webContents.send('context-captured', capturedContext);
     }
   });
@@ -230,6 +230,11 @@ app.whenReady().then(async () => {
       app.quit();
       return;
   }
+
+  // When the main window is closed, deregister its reference
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
   // Send pending context to renderer if available
   if (pendingContext) {

@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Globe, Search, ArrowUp, Mic, X, FileText, Bot } from 'lucide-react';
 import clsx from 'clsx';
 
-const ContextPill = ({ title, onRemove, onClick }) => (
-  <div onClick={onClick} className="cursor-pointer bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-800 flex items-center gap-2 shadow-sm hover:bg-gray-50">
+const ContextPill = ({ title, onRemove }) => (
+  <div className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-800 shadow-sm">
     <FileText size={14} className="text-gray-500" />
-    <span className="truncate max-w-xs">{title}</span>
+    <span>{title}</span>
     <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-gray-400 hover:text-gray-600">
       <X size={14} />
     </button>
@@ -101,24 +101,6 @@ const PopupPage = () => {
     }
   };
 
-  const useContext = () => {
-    if (context && context.text) {
-      let content = context.text;
-      const lines = content.split('\n');
-      const firstContentIndex = lines.findIndex(line => !line.startsWith('Context captured from'));
-
-      if (firstContentIndex !== -1) {
-        content = lines.slice(firstContentIndex).join('\n');
-      }
-      
-      setInputValue(prev => prev ? `${prev}\n${content}` : content);
-      setShowContext(false);
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
-    }
-  };
-
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -128,16 +110,43 @@ const PopupPage = () => {
       // Width, height, resizable
       window.electron.resizePopup(500, 500, true); 
     }
+    
+    const uiMessageContent = inputValue.trim();
+    let modelMessageContent = uiMessageContent;
 
-    // Create message with timestamp for UI
-    const userMessage = {
+    // If there is context that hasn't been manually added, prepend it to the message for the model.
+    if (context && showContext && context.text) {
+      let contextText = context.text;
+      const lines = contextText.split('\n');
+      const firstContentIndex = lines.findIndex(line => !line.startsWith('Context captured from'));
+
+      if (firstContentIndex !== -1) {
+        contextText = lines.slice(firstContentIndex).join('\n').trim();
+      }
+      
+      if (contextText) {
+        modelMessageContent = `<context>${contextText}</context>\n${uiMessageContent}`;
+      }
+      
+      // Mark context as used
+      setShowContext(false);
+    }
+
+    // Create message for UI
+    const userMessageForUi = {
       role: 'user',
-      content: inputValue.trim()
+      content: uiMessageContent,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessageForUi]);
     setInputValue('');
     setLoading(true);
+    
+    // Create message for model
+    const userMessageForModel = {
+      role: 'user',
+      content: modelMessageContent
+    };
 
     try {
       // Create assistant message placeholder
@@ -150,7 +159,7 @@ const PopupPage = () => {
       setMessages(prev => [...prev, assistantPlaceholder]);
 
       // Start streaming - send messages without timestamps
-      const streamHandler = window.electron.startChatStream([...messages, userMessage], selectedModel);
+      const streamHandler = window.electron.startChatStream([...messages, userMessageForModel], selectedModel);
       
       let finalContent = '';
 
@@ -218,7 +227,7 @@ const PopupPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-50 text-sm font-sans overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
+    <div className="flex flex-col h-screen text-sm overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
       
       {isExpanded && (
         <>
@@ -278,7 +287,6 @@ const PopupPage = () => {
               <ContextPill 
                 title={context.title || 'Captured Context'} 
                 onRemove={() => setShowContext(false)}
-                onClick={useContext}
               />
             </div>
           )}
