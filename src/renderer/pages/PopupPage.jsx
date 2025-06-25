@@ -424,7 +424,7 @@ const PopupPage = () => {
   return (
     <div 
       ref={popupRef} 
-      className="flex flex-col bg-background backdrop-blur-xl rounded-3xl shadow-2xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300 overflow-y-auto" 
+      className="flex flex-col bg-background backdrop-blur-xl rounded-3xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300 overflow-y-auto" 
       style={{ WebkitAppRegion: 'drag' }}
     >
       
@@ -467,13 +467,13 @@ const PopupPage = () => {
             {messages.map((message, index) => (
               <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                 {message.role === 'assistant' && (
-                  <div className="w-8 h-8 bg-primary/10 rounded-2xl flex items-center justify-center flex-shrink-0 border border-border/50 shadow-sm">
+                  <div className="w-8 h-8 bg-primary/10 rounded-2xl flex items-center justify-center flex-shrink-0 border border-border/50">
                     <Bot size={16} className="text-primary"/>
                   </div>
                 )}
-                <div className={cn('max-w-[85%] rounded-3xl px-4 py-3 shadow-lg border backdrop-blur-sm transition-all duration-200 hover:shadow-xl', {
-                  'bg-primary text-primary-foreground border-primary/20 shadow-primary/20': message.role === 'user',
-                  'bg-card/80 text-card-foreground border-border/50 shadow-border/10': message.role === 'assistant',
+                <div className={cn('max-w-[85%] rounded-3xl px-4 py-3 border backdrop-blur-sm transition-all duration-200', {
+                  'bg-primary text-primary-foreground border-primary/20': message.role === 'user',
+                  'bg-card/80 text-card-foreground border-border/50': message.role === 'assistant',
                 })}>
                   <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                     {message.content}
