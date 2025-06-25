@@ -700,7 +700,7 @@ const PopupPage = () => {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder="Ask anything..."
-                className="min-h-[44px] max-h-[200px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:border-ring/50 focus:ring-ring/20 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
+                className="min-h-[44px] max-h-[200px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:none pt-[10px] pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
                 rows={1}
                 disabled={loading}
                 style={{ WebkitAppRegion: 'no-drag' }}
