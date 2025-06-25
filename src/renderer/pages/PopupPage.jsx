@@ -35,6 +35,7 @@ const PopupPage = () => {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const popupRef = useRef(null);
 
   // Load models and context on mount
   useEffect(() => {
@@ -70,9 +71,42 @@ const PopupPage = () => {
     if (textarea) {
       textarea.style.height = 'auto';
       const scrollHeight = textarea.scrollHeight;
-      textarea.style.height = `${Math.min(scrollHeight, 120)}px`;
+      textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
     }
   }, [inputValue]);
+
+  // Dynamic popup resizing
+  useEffect(() => {
+    const popupElement = popupRef.current;
+    if (!popupElement) return;
+
+    const resizePopup = () => {
+      if (popupRef.current) {
+        const newHeight = popupRef.current.scrollHeight;
+        const maxHeight = window.screen.availHeight * 0.85; // Cap at 85% of screen height
+        
+        let clampedHeight = Math.min(newHeight, maxHeight);
+        clampedHeight = Math.max(clampedHeight, 100); // Min height
+
+        window.electron.resizePopup(500, Math.ceil(clampedHeight), isExpanded);
+      }
+    };
+
+    // Use MutationObserver to detect content changes that affect height
+    const observer = new MutationObserver(resizePopup);
+    observer.observe(popupElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    // Initial resize
+    resizePopup();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isExpanded]);
 
   const initializePopup = async () => {
     try {
@@ -125,7 +159,6 @@ const PopupPage = () => {
     // Expand the popup on the first message
     if (!isExpanded) {
       setIsExpanded(true);
-      window.electron.resizePopup(480, 500, true); 
     }
     
     let uiMessageContent = textContent;
@@ -389,7 +422,11 @@ const PopupPage = () => {
   }, [fullScreenImage]);
 
   return (
-    <div className="flex flex-col h-screen bg-background backdrop-blur-xl rounded-3xl shadow-2xl animate-in fade-in-0 zoom-in-95 duration-300" style={{ WebkitAppRegion: 'drag' }}>
+    <div 
+      ref={popupRef} 
+      className="flex flex-col bg-background backdrop-blur-xl rounded-3xl shadow-2xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300 overflow-y-auto" 
+      style={{ WebkitAppRegion: 'drag' }}
+    >
       
       {/* Exit Button - Always in top right */}
       {!isExpanded && (
@@ -426,7 +463,7 @@ const PopupPage = () => {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 rounded-t-3xl" style={{ WebkitAppRegion: 'no-drag' }}>
+          <div className="p-4 space-y-4 rounded-t-3xl" style={{ WebkitAppRegion: 'no-drag' }}>
             {messages.map((message, index) => (
               <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                 {message.role === 'assistant' && (
@@ -570,7 +607,7 @@ const PopupPage = () => {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder="Ask anything..."
-                className="min-h-[44px] max-h-[120px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:border-ring/50 focus:ring-ring/20 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
+                className="min-h-[44px] max-h-[200px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:border-ring/50 focus:ring-ring/20 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
                 rows={1}
                 disabled={loading}
                 style={{ WebkitAppRegion: 'no-drag' }}

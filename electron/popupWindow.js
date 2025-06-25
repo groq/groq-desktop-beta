@@ -20,9 +20,9 @@ class PopupWindowManager {
     const popupWidth = 500;
     const initialPopupHeight = 100; // Height for just the input box
     
-    // Center the popup on screen
+    // Position the popup at the bottom center of the screen
     const x = Math.round((screenWidth - popupWidth) / 2);
-    const y = Math.round((screenHeight - initialPopupHeight) / 2);
+    const y = screenHeight - initialPopupHeight - 60; // 60px margin from bottom
 
     this.popupWindow = new BrowserWindow({
       width: popupWidth,
@@ -40,7 +40,7 @@ class PopupWindowManager {
       fullscreenable: false,
       frame: false, // Remove frame to eliminate window controls
       transparent: true,
-      hasShadow: true,
+      hasShadow: false,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -112,17 +112,18 @@ class PopupWindowManager {
   resizePopup(width, height, resizable = true) {
     if (this.isOpen()) {
       const window = this.getPopupWindow();
+      const { workAreaSize } = screen.getPrimaryDisplay();
       const bounds = window.getBounds();
       
-      // Calculate new y position to make it seem like it's expanding upwards
-      const newY = bounds.y - (height - bounds.height);
+      // New y position to expand upwards from bottom of screen
+      const newY = workAreaSize.height - height - 60; // 60px margin from bottom
 
       window.setBounds({
         x: bounds.x - Math.round((width - bounds.width) / 2),
         y: newY,
         width,
         height,
-      }, true); // Animate on macOS
+      }, false); // Set animation to false for smoother resizing
 
       window.setResizable(resizable);
     }

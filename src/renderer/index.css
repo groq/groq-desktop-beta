@@ -49,9 +49,13 @@
   }
 }
 
-body {
-  @apply bg-background text-foreground;
-  margin: 0;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-transparent text-foreground;
+  }
 }
 
 @layer components {
