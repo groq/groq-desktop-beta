@@ -10,7 +10,7 @@
     --card-foreground: 224 71.4% 4.1%;
     --popover: 0 0% 100%;
     --popover-foreground: 224 71.4% 4.1%;
-    --primary: 12 76% 61%;
+    --primary: 9 90% 59%;
     --primary-foreground: 0 0% 98%;
     --secondary: 220 14.3% 95.9%;
     --secondary-foreground: 220.9 39.3% 11%;
@@ -22,7 +22,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 12 76% 61%;
+    --ring: 9 90% 59%;
     --radius: 0.5rem;
   }
 
@@ -33,7 +33,7 @@
     --card-foreground: 0 0% 95%;
     --popover: 224 71.4% 4.1%;
     --popover-foreground: 0 0% 95%;
-    --primary: 12 76% 61%;
+    --primary: 9 90% 59%;
     --primary-foreground: 0 0% 98%;
     --secondary: 215 27.9% 16.9%;
     --secondary-foreground: 0 0% 98%;
@@ -45,7 +45,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 215 27.9% 16.9%;
     --input: 215 27.9% 16.9%;
-    --ring: 12 76% 61%;
+    --ring: 9 90% 59%;
   }
 }
 
@@ -60,7 +60,7 @@ body {
   }
   
   .btn-primary {
-    @apply bg-[#f55036] text-white hover:bg-[#f55036]/90;
+    @apply bg-[#F55036] text-white hover:bg-[#F55036]/90;
   }
   
   .input {

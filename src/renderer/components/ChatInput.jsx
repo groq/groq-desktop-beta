@@ -1,4 +1,4 @@
-import { ArrowUp, Loader2, Upload, Hammer } from "lucide-react";
+import { ArrowUp, Loader2, ImagePlus, Hammer } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import TextAreaAutosize from "react-textarea-autosize";
 import { 
@@ -356,9 +356,9 @@ function ChatInput({
 								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
 								title={visionSupported ? "Upload file or image (max 5)" : "Upload files (images require vision-capable model)"}
 								disabled={loading}
-							>
-								<Upload className="w-4 h-4 mr-2" />
-								Upload
+												>
+						<ImagePlus className="w-4 h-4 mr-2" />
+						Upload
 							</Button>
 						)}
 						<input

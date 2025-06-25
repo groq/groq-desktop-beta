@@ -17,10 +17,13 @@ module.exports = {
         sans: ['Montserrat', 'sans-serif'],
       },
       colors: {
-        primary: "#f55036",
+        primary: {
+          DEFAULT: "#F55036",
+          foreground: "hsl(var(--primary-foreground))",
+        },
         'user-message-bg': '#222326',
         'custom-dark-bg': '#121418',
-        'groq-orange': '#f55036',
+        'groq-orange': '#F55036',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

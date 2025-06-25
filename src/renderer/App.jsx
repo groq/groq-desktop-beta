@@ -870,13 +870,13 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className="container px-6 py-8">
+          <div className="container px-6 py-8 h-full">
             <div className="max-w-4xl mx-auto h-full">
             {messages.length === 0 ? (
               /* Welcome Screen */
               <div className="flex flex-col items-center justify-center h-full space-y-8">
                 <div className="text-center space-y-4">
-                  <h1 className="text-4xl font-bold text-orange-500">
+                  <h1 className="text-4xl font-bold text-primary">
                     Build Fast
                   </h1>
                   <p className="text-xl text-muted-foreground max-w-2xl">
@@ -932,8 +932,8 @@ function App() {
               </div>
             ) : (
               /* Chat View */
-              <div className="flex flex-col h-full">
-                <div className="flex-1 overflow-y-auto mb-6">
+              <div className="flex flex-col h-full min-h-0">
+                <div className="flex-1 overflow-y-auto mb-6 min-h-0">
                   <MessageList 
                     messages={messages} 
                     onToolCallExecute={executeToolCall} 
@@ -942,7 +942,7 @@ function App() {
                   <div ref={messagesEndRef} />
                 </div>
                 
-                <div className="border-t bg-background/95 backdrop-blur pt-6">
+                <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur pt-6">
                   <ChatInput
                     onSendMessage={handleSendMessage}
                     loading={loading}
