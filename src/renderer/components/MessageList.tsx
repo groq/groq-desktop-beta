@@ -2,13 +2,55 @@ import React, { useState, useEffect } from 'react';
 import Message from './Message';
 import MarkdownRenderer from './MarkdownRenderer';
 
-function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) {
-  const [showRemoveButtonIndex, setShowRemoveButtonIndex] = useState(null);
-  const [fullScreenImage, setFullScreenImage] = useState(null);
+// Define types for message content
+interface MessageTextContent {
+  type: 'text';
+  text: string;
+}
+
+interface MessageImageContent {
+  type: 'image_url';
+  image_url: {
+    url: string;
+  };
+}
+
+type MessageContent = MessageTextContent | MessageImageContent;
+
+// Define the message structure
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  content: string | MessageContent[];
+  tool_calls?: Array<{
+    id: string;
+    type: string;
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  tool_call_id?: string;
+  reasoning?: string;
+  isStreaming?: boolean;
+}
+
+interface MessageListProps {
+  messages: ChatMessage[];
+  onToolCallExecute?: (toolCall: any) => void;
+  onRemoveLastMessage?: () => void;
+}
+
+const MessageList: React.FC<MessageListProps> = ({ 
+  messages = [], 
+  onToolCallExecute, 
+  onRemoveLastMessage 
+}) => {
+  const [showRemoveButtonIndex, setShowRemoveButtonIndex] = useState<number | null>(null);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
   // Effect to handle Escape key for closing fullscreen image
   useEffect(() => {
-    const handleKeyDown = (event) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setFullScreenImage(null);
       }
@@ -62,7 +104,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
           onToolCallExecute={onToolCallExecute}
           allMessages={messages} // Pass all messages for the Message component to find tool results
           isLastMessage={index === displayMessages.length - 1}
-          onRemoveMessage={index === displayMessages.length - 1 ? onRemoveLastMessage : null}
+          onRemoveMessage={index === displayMessages.length - 1 && onRemoveLastMessage ? onRemoveLastMessage : undefined}
         >
           {message.role === 'user' ? (
             <div 
@@ -92,11 +134,11 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
                 })
               ) : (
                 // If content is just a string, render it directly with MarkdownRenderer
-                <MarkdownRenderer content={message.content || ''} />
+                <MarkdownRenderer content={typeof message.content === 'string' ? message.content : ''} />
               )}
             </div>
           ) : message.role === 'assistant' ? (
-            <MarkdownRenderer content={message.content || ''} />
+            <MarkdownRenderer content={typeof message.content === 'string' ? message.content : ''} />
           ) : null}
         </Message>
       ))}
@@ -127,6 +169,6 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
       )}
     </div>
   );
-}
+};
 
 export default MessageList; 

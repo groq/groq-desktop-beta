@@ -1,7 +1,24 @@
 import React, { useState } from 'react';
 import ToolCall from './ToolCall';
+import { ChatMessage } from './MessageList';
 
-function Message({ message, children, onToolCallExecute, allMessages, isLastMessage, onRemoveMessage }) {
+interface MessageProps {
+  message: ChatMessage;
+  children: React.ReactNode;
+  onToolCallExecute?: (toolCall: any) => void;
+  allMessages?: ChatMessage[];
+  isLastMessage?: boolean;
+  onRemoveMessage?: () => void;
+}
+
+const Message: React.FC<MessageProps> = ({ 
+  message, 
+  children, 
+  onToolCallExecute, 
+  allMessages, 
+  isLastMessage, 
+  onRemoveMessage 
+}) => {
   const { role, tool_calls, reasoning, isStreaming } = message;
   const [showReasoning, setShowReasoning] = useState(false);
   const isUser = role === 'user';
@@ -9,7 +26,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   const isStreamingMessage = isStreaming === true;
 
   // Find tool results for this message's tool calls in the messages array
-  const findToolResult = (toolCallId) => {
+  const findToolResult = (toolCallId: string) => {
     if (!allMessages) return null;
     
     // Look for a tool message that matches this tool call ID
@@ -17,7 +34,13 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
       msg => msg.role === 'tool' && msg.tool_call_id === toolCallId
     );
     
-    return toolMessage ? toolMessage.content : null;
+    // Convert content to string if it's an array
+    if (toolMessage) {
+      const content = toolMessage.content;
+      return Array.isArray(content) ? JSON.stringify(content) : content;
+    }
+    
+    return null;
   };
 
   // Message container classes
@@ -111,6 +134,6 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
       {isUser && <Avatar />}
     </div>
   );
-}
+};
 
 export default Message; 
