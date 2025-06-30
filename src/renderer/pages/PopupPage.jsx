@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { cn } from '../lib/utils';
+import MessageList from '../components/MessageList';
 
 const ContextPill = ({ title, onRemove }) => (
   <Badge variant="outline" className="inline-flex items-center gap-2 bg-background/50 backdrop-blur-sm border-border/50 text-foreground shadow-sm">
@@ -424,13 +425,13 @@ const PopupPage = () => {
   return (
     <div 
       ref={popupRef} 
-      className="flex flex-col bg-background backdrop-blur-xl rounded-3xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300 overflow-y-auto" 
+      className="flex flex-col bg-neutral-50 backdrop-blur-xl rounded-3xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300" 
       style={{ WebkitAppRegion: 'drag' }}
     >
       
       {/* Exit Button - Always in top right */}
       {!isExpanded && (
-        <div className="absolute top-3 right-3 z-10" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="absolute top-3 right-3 z-50" style={{ WebkitAppRegion: 'no-drag' }}>
           <Button 
             variant="ghost" 
             size="icon"
@@ -446,7 +447,7 @@ const PopupPage = () => {
       {isExpanded && (
         <>
           {/* Header - Only shows when expanded */}
-          <div className="px-4 pt-3 pb-2 flex justify-between items-center border-b border-border/30" style={{ WebkitAppRegion: 'drag' }}>
+          <div className="px-4 pt-3 pb-2 flex justify-between items-center border-b border-border/30 sticky top-0 z-50 bg-background/95 backdrop-blur-sm" style={{ WebkitAppRegion: 'drag' }}>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span className="text-xs font-medium text-foreground">Groq Chat</span>
@@ -463,41 +464,17 @@ const PopupPage = () => {
           </div>
 
           {/* Messages */}
-          <div className="p-4 space-y-4 rounded-t-3xl" style={{ WebkitAppRegion: 'no-drag' }}>
-            {messages.map((message, index) => (
-              <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-                {message.role === 'assistant' && (
-                  <div className="w-8 h-8 bg-primary/10 rounded-2xl flex items-center justify-center flex-shrink-0 border border-border/50">
-                    <Bot size={16} className="text-primary"/>
-                  </div>
-                )}
-                <div className={cn('max-w-[85%] rounded-3xl px-4 py-3 border backdrop-blur-sm transition-all duration-200', {
-                  'bg-primary text-primary-foreground border-primary/20': message.role === 'user',
-                  'bg-card/80 text-card-foreground border-border/50': message.role === 'assistant',
-                })}>
-                  <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                    {message.content}
-                    {message.isStreaming && (
-                      <span className="inline-block w-2 h-4 bg-current opacity-75 animate-pulse ml-1 rounded-sm"></span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-foreground">
-                <Search size={32} className="mb-3 opacity-50"/>
-                <p className="text-sm font-medium">Ask anything to start</p>
-                <p className="text-xs opacity-75 mt-1">Press Esc to close</p>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+          <div className="p-4 space-y-4 rounded-t-3xl overflow-y-auto" style={{ WebkitAppRegion: 'no-drag' }}>
+            <MessageList 
+              messages={messages} 
+            />
           </div>
+            
         </>
       )}
 
       {/* Input Area */}
-      <div className={cn("bg-gradient-to-t from-card/60 to-card/40 backdrop-blur-sm border-t border-border/30 rounded-b-3xl", {
+      <div className={cn("bg-gradient-to-t from-card/60 to-card/40 backdrop-blur-sm border-t border-border/30 rounded-b-3xl sticky bottom-0", {
         "flex-1 flex items-center rounded-3xl": !isExpanded,
       })}>
         <div className="p-4 w-full space-y-3">
@@ -567,7 +544,7 @@ const PopupPage = () => {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "h-9 w-9 shrink-0 rounded-xl transition-all duration-200 hover:scale-105",
+                  "h-9 w-9 shrink-0 rounded-xl transition-all mb-1 duration-200 hover:scale-105",
                   visionSupported 
                     ? "text-muted-foreground hover:text-foreground hover:bg-accent/50" 
                     : "text-muted-foreground/50 cursor-not-allowed"
@@ -588,18 +565,6 @@ const PopupPage = () => {
               style={{ display: "none" }}
               disabled={loading || files.length >= 5}
             />
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 rounded-xl transition-all duration-200 hover:scale-105" 
-              style={{ WebkitAppRegion: 'no-drag' }}
-              title="Configure MCP servers"
-            >
-              <Hammer size={16} />
-            </Button>
-
-            
             <div className="flex-1 relative">
               <Textarea
                 ref={textareaRef}
@@ -607,7 +572,7 @@ const PopupPage = () => {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder="Ask anything..."
-                className="min-h-[44px] max-h-[200px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:border-ring/50 focus:ring-ring/20 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground"
+                className="min-h-[44px] max-h-[200px] resize-none border-border/50 bg-background/80 backdrop-blur-sm focus:outline-none focus:ring-0 pr-12 rounded-2xl transition-all duration-200 text-foreground placeholder:text-muted-foreground placeholder:pt-[2px]"
                 rows={1}
                 disabled={loading}
                 style={{ WebkitAppRegion: 'no-drag' }}
