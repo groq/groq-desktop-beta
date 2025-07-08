@@ -331,24 +331,6 @@ class ContextCapture {
       }
     });
   }
-
-  // Manual context capture (for testing)
-  async captureManualContext(text, title = null, source = null) {
-    const context = {
-      timestamp: Date.now(),
-      text: text,
-      title: title || 'Manual Context',
-      source: source || 'Manual Input',
-      contextType: 'manual',
-      appName: source
-    };
-
-    if (this.onContextCaptured) {
-      this.onContextCaptured(context);
-    }
-
-    return context;
-  }
 }
 
 module.exports = ContextCapture; 

@@ -40,7 +40,10 @@ class PopupWindowManager {
       fullscreenable: false,
       frame: false, // Remove frame to eliminate window controls
       transparent: true,
-      hasShadow: false,
+      hasShadow: true,
+      backgroundColor: '#ffffff',
+      vibrancy: 'popover',
+      visualEffectState: 'active',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,

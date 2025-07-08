@@ -33,55 +33,7 @@ function ChatInput({
 	const textareaRef = useRef(null);
 	const fileInputRef = useRef(null); // Ref for file input
 	const prevLoadingRef = useRef(loading);
-
-	// Fetch autocomplete suggestion
-	useEffect(() => {
-		// Clear any existing timeout
-		if (suggestionTimeout.current) {
-			clearTimeout(suggestionTimeout.current);
-		}
-
-		// Clear suggestion immediately when typing continues
-		if (suggestion) setSuggestion("");
-
-		// Only trigger autocomplete if enabled, for reasonable text lengths and when not loading
-		if (autocompleteEnabled && message.trim().length >= 5 && !loading) {
-			suggestionTimeout.current = setTimeout(async () => {
-				try {
-					const result = await window.electron.getAutocompleteSuggestion({
-						text: message,
-						messages: messages || [], // from ChatContext
-						context: activeContext?.text || '', // from ChatContext
-					});
-
-					// Only show valid, single-line suggestions that aren't too long
-					if (result && typeof result === 'string' && result.trim() && !result.includes("\n")) {
-						const trimmedResult = result.trim();
-						// Reasonable length limit to prevent UI issues
-						if (trimmedResult.length <= 100 && trimmedResult.length > 0) {
-							// Ensure the suggestion doesn't start with the same text
-							if (!trimmedResult.toLowerCase().startsWith(message.toLowerCase())) {
-								setSuggestion(trimmedResult);
-							}
-						}
-					}
-				} catch (error) {
-					console.error("Autocomplete error:", error);
-					// Don't show error to user, just silently fail
-					setSuggestion("");
-				}
-			}, 400); // Slightly increased delay to reduce API calls
-		} else {
-			setSuggestion("");
-		}
-
-		// Cleanup on unmount
-		return () => {
-			if (suggestionTimeout.current) {
-				clearTimeout(suggestionTimeout.current);
-			}
-		};
-	}, [message, loading, messages, activeContext, autocompleteEnabled]);
+	
 
 	// Function to handle file selection (images and other files)
 	const handleFileChange = (e) => {
@@ -390,13 +342,6 @@ function ChatInput({
 							rows={1}
 							disabled={loading}
 						/>
-						{/* Autocomplete suggestion overlay */}
-						{autocompleteEnabled && suggestion && !loading && (
-							<div className="absolute inset-0 px-4 py-3 pointer-events-none overflow-hidden whitespace-pre-wrap">
-								<span className="invisible">{message}</span>
-								<span className="text-muted-foreground/60 bg-muted-foreground/5 px-1 rounded">{suggestion}</span>
-							</div>
-						)}
 						{/* Drag overlay */}
 						{isDragOver && (
 							<div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-2xl flex items-center justify-center pointer-events-none">
@@ -464,25 +409,6 @@ function ChatInput({
 								Tools
 							</Button>
 						)}
-
-						{/* Autocomplete Toggle Button */}
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={() => setAutocompleteEnabled(!autocompleteEnabled)}
-							className={cn(
-								"transition-colors rounded-xl",
-								autocompleteEnabled 
-									? "text-green-600 hover:text-green-700 hover:bg-green-100/50" 
-									: "text-muted-foreground hover:text-foreground"
-							)}
-							title={autocompleteEnabled ? "Disable autocomplete" : "Enable autocomplete"}
-							disabled={loading}
-						>
-							{autocompleteEnabled ? <Zap className="w-4 h-4 mr-2" /> : <ZapOff className="w-4 h-4 mr-2" />}
-							Auto
-						</Button>
 					</div>
 
 					<div className="flex items-center gap-3">

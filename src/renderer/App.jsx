@@ -4,12 +4,10 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ToolsPanel from './components/ToolsPanel';
 import ToolApprovalModal from './components/ToolApprovalModal';
-import ContextDisplay from './components/ContextDisplay';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings, Zap, Brain, MessageSquare } from 'lucide-react';
-import { Card, CardContent } from './components/ui/card';
+import { Settings, Zap, MessageSquare } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 
@@ -882,39 +880,6 @@ function App() {
                   <p className="text-xl text-muted-foreground max-w-2xl">
                     Chat with AI models powered by Groq's lightning-fast inference engine
                   </p>
-                </div>
-
-                {/* Feature Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
-                  <Card>
-                    <CardContent className="p-6 text-center">
-                      <MessageSquare className="h-8 w-8 text-primary mx-auto mb-3" />
-                      <h3 className="font-semibold mb-2">Smart Conversations</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Advanced AI models with context awareness
-                      </p>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="p-6 text-center">
-                      <Zap className="h-8 w-8 text-primary mx-auto mb-3" />
-                      <h3 className="font-semibold mb-2">Lightning Fast</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Powered by Groq's ultra-fast inference
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="p-6 text-center">
-                      <Settings className="h-8 w-8 text-primary mx-auto mb-3" />
-                      <h3 className="font-semibold mb-2">MCP Tools</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Extensible with MCP server integration
-                      </p>
-                    </CardContent>
-                  </Card>
                 </div>
 
                 {/* Chat Input */}
