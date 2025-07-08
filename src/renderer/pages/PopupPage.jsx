@@ -425,7 +425,7 @@ const PopupPage = () => {
   return (
     <div 
       ref={popupRef} 
-      className="flex flex-col bg-neutral-50 backdrop-blur-xl rounded-3xl border border-border/20 animate-in fade-in-0 zoom-in-95 duration-300" 
+      className="flex flex-col bg-neutral-50 backdrop-blur-xl animate-in fade-in-0 zoom-in-95 duration-300 scrollbar-none" 
       style={{ WebkitAppRegion: 'drag' }}
     >
       
@@ -469,12 +469,11 @@ const PopupPage = () => {
               messages={messages} 
             />
           </div>
-            
         </>
       )}
 
       {/* Input Area */}
-      <div className={cn("bg-gradient-to-t from-card/60 to-card/40 backdrop-blur-sm border-t border-border/30 rounded-b-3xl sticky bottom-0", {
+      <div className={cn("bg-white backdrop-blur-sm border-t border-border/30 rounded-b-3xl sticky bottom-0", {
         "flex-1 flex items-center rounded-3xl": !isExpanded,
       })}>
         <div className="p-4 w-full space-y-3">
