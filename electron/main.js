@@ -98,6 +98,22 @@ function initializeContextCapture() {
     console.log('Context captured via global hotkey:', capturedContext);
     lastCapturedContext = capturedContext;
     
+    // Check if popup is enabled in settings
+    const settings = loadSettings();
+    if (settings.popupEnabled === false) {
+      console.log('Popup is disabled in settings. Not showing.');
+      // Optionally, show the main window instead
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+        // If you want to pass context to the main window, you can do it here
+        if (mainWindow.webContents) {
+            mainWindow.webContents.send('context-captured', capturedContext);
+        }
+      }
+      return;
+    }
+
     // Open popup window with captured context
     try {
       popupWindowManager.createPopupWindow(capturedContext);

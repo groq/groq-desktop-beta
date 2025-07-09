@@ -18,7 +18,8 @@ function loadSettings() {
             top_p: 0.95,
             mcpServers: {},
             disabledMcpServers: [],
-            customSystemPrompt: ''
+            customSystemPrompt: '',
+            popupEnabled: true
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -30,7 +31,8 @@ function loadSettings() {
         top_p: 0.95,
         mcpServers: {},
         disabledMcpServers: [],
-        customSystemPrompt: ''
+        customSystemPrompt: '',
+        popupEnabled: true
     };
 
     try {
@@ -56,6 +58,7 @@ function loadSettings() {
             settings.mcpServers = settings.mcpServers || defaultSettings.mcpServers;
             settings.disabledMcpServers = settings.disabledMcpServers || defaultSettings.disabledMcpServers;
             settings.customSystemPrompt = settings.customSystemPrompt || defaultSettings.customSystemPrompt;
+            settings.popupEnabled = settings.popupEnabled ?? defaultSettings.popupEnabled;
 
             // Log API key status for debugging (without revealing the actual key)
             if (settings.GROQ_API_KEY && settings.GROQ_API_KEY !== "<replace me>") {

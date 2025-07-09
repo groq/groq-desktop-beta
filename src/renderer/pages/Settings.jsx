@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Select } from '../components/ui/select';
+import Switch from '../components/ui/Switch';
 
 function Settings() {
   const [settings, setSettings] = useState({
@@ -16,7 +17,8 @@ function Settings() {
     top_p: 0.95,
     mcpServers: {},
     disabledMcpServers: [],
-    customSystemPrompt: ''
+    customSystemPrompt: '',
+    popupEnabled: true
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,7 +58,8 @@ function Settings() {
             top_p: 0.95,
             mcpServers: {},
             disabledMcpServers: [],
-            customSystemPrompt: ''
+            customSystemPrompt: '',
+            popupEnabled: true
         }));
       }
     };
@@ -118,6 +121,12 @@ function Settings() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     const updatedSettings = { ...settings, [name]: value };
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+  };
+
+  const handleToggleChange = (name, checked) => {
+    const updatedSettings = { ...settings, [name]: checked };
     setSettings(updatedSettings);
     saveSettings(updatedSettings);
   };
@@ -744,6 +753,28 @@ function Settings() {
                       Controls diversity by limiting tokens to the most likely ones
                     </p>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Popup Window Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Popup Window</CardTitle>
+                <CardDescription>
+                  Enable or disable the global hotkey (Cmd+G or Ctrl+G) to open the popup window for quick context capture.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="popup-enabled" className="font-medium">
+                    Enable Popup Window
+                  </Label>
+                  <Switch
+                    id="popup-enabled"
+                    checked={settings.popupEnabled}
+                    onChange={(e) => handleToggleChange('popupEnabled', e.target.checked)}
+                  />
                 </div>
               </CardContent>
             </Card>
