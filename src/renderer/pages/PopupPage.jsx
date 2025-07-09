@@ -139,7 +139,7 @@ const PopupPage = () => {
   };
 
   const closePopup = () => {
-    window.electron.closePopup();
+    window.close();
   };
 
   const handleKeyPress = (e) => {
