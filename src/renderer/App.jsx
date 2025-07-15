@@ -827,7 +827,7 @@ function App() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <img 
-                src="/groqLogo.png" 
+                src="./groqLogo.png" 
                 alt="Groq Logo" 
                 className="h-8 w-auto"
               />

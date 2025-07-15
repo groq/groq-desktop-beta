@@ -516,7 +516,7 @@ const PopupPage = () => {
           ) : (
             <div className="flex items-center h-4 gap-2">
             <img 
-                src="/groqLogo.png" 
+                src="./groqLogo.png" 
                 alt="Groq Logo" 
                 className="h-4 w-auto"
               />
