@@ -26,7 +26,7 @@ mac:
     - zip
   icon: build/icon.icns
   darkModeSupport: true
-  hardenedRuntime: true
+  hardenedRuntime: false
   gatekeeperAssess: false
   extendInfo:
     NSRequiresAquaSystemAppearance: false
