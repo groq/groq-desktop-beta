@@ -78,6 +78,7 @@ const PopupPage = () => {
   }, [inputValue]);
 
   // Dynamic popup resizing
+  
   useEffect(() => {
     const popupElement = popupRef.current;
     if (!popupElement) return;

@@ -8,7 +8,7 @@ class PopupWindowManager {
   }
 
   // Create and show the popup window
-  createPopupWindow(capturedContext = null) {
+  createPopupWindow(capturedContext = null, mousePosition = null) {
     // Close existing popup if open
     if (this.popupWindow && !this.popupWindow.isDestroyed()) {
       this.popupWindow.close();
@@ -20,9 +20,15 @@ class PopupWindowManager {
     const popupWidth = 500;
     const initialPopupHeight = 100; // Height for just the input box
     
-    // Position the popup at the bottom center of the screen
-    const x = Math.round((screenWidth - popupWidth) / 2);
-    const y = screenHeight - initialPopupHeight - 60; // 60px margin from bottom
+    // Position the popup at the mouse cursor or bottom center if no position is provided
+    let x, y;
+    if (mousePosition) {
+      x = mousePosition.x - Math.round(popupWidth / 2);
+      y = mousePosition.y;
+    } else {
+      x = Math.round((screenWidth - popupWidth) / 2);
+      y = screenHeight - initialPopupHeight - 60;
+    }
 
     this.popupWindow = new BrowserWindow({
       width: popupWidth,
@@ -115,18 +121,22 @@ class PopupWindowManager {
   resizePopup(width, height, resizable = true) {
     if (this.isOpen()) {
       const window = this.getPopupWindow();
+      const wasResizable = window.isResizable();
       const { workAreaSize } = screen.getPrimaryDisplay();
       const bounds = window.getBounds();
       
-      // New y position to expand upwards from bottom of screen
-      const newY = workAreaSize.height - height - 60; // 60px margin from bottom
-
-      window.setBounds({
-        x: bounds.x - Math.round((width - bounds.width) / 2),
-        y: newY,
+      const newBounds = {
         width,
         height,
-      }, false); // Set animation to false for smoother resizing
+      };
+
+      // If this is the first expansion, calculate the centered/upward position.
+      if (!wasResizable && resizable) {
+        newBounds.x = bounds.x - Math.round((width - bounds.width) / 2);
+        newBounds.y = bounds.y + bounds.height - height - 100;
+      }
+      
+      window.setBounds(newBounds, false);
 
       window.setResizable(resizable);
     }

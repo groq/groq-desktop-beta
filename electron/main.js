@@ -1,6 +1,7 @@
 const { app } = require('electron');
 const fs   = require('fs');
 const path = require('path');
+const { globalShortcut } = require('electron');
 
 // Create ~/Library/Logs/Groq Desktop if it does not exist
 app.setAppLogsPath();
@@ -116,7 +117,8 @@ function initializeContextCapture() {
 
     // Open popup window with captured context
     try {
-      popupWindowManager.createPopupWindow(capturedContext);
+      const { x, y } = screen.getCursorScreenPoint();
+      popupWindowManager.createPopupWindow(capturedContext, { x, y });
       console.log('Popup window opened with context from:', capturedContext.source);
     } catch (error) {
       console.error('Error opening popup window:', error);
@@ -205,6 +207,13 @@ app.whenReady().then(async () => {
     return JSON.parse(JSON.stringify(modelContextSizes));
   });
 
+  ipcMain.handle('get-captured-context', async () => {
+    // Return the most recently captured context
+    const context = lastCapturedContext;
+    // Don't clear automatically for popup usage
+    return context;
+  });
+
   ipcMain.handle('resize-popup', (event, { width, height, resizable }) => {
     if (popupWindowManager) {
       popupWindowManager.resizePopup(width, height, resizable);
@@ -287,12 +296,7 @@ app.whenReady().then(async () => {
   });
 
   // --- Context Capture IPC Handlers (for modal and popup) ---
-  ipcMain.handle('get-captured-context', async () => {
-    // Return the most recently captured context
-    const context = lastCapturedContext;
-    // Don't clear automatically for popup usage
-    return context;
-  });
+  // Note: get-captured-context handler is registered earlier in the initialization
 
   ipcMain.handle('clear-captured-context', async () => {
     lastCapturedContext = null;
