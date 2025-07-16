@@ -1,39 +1,73 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, ChangeEvent, KeyboardEvent, FormEvent } from 'react';
 
-function ChatInput({ onSendMessage, loading = false, visionSupported = false }) {
-  const [message, setMessage] = useState('');
-  const [images, setImages] = useState([]); // State for selected images
-  const textareaRef = useRef(null);
-  const fileInputRef = useRef(null); // Ref for file input
-  const prevLoadingRef = useRef(loading);
+// Define message content types
+interface MessageTextContent {
+  type: 'text';
+  text: string;
+}
+
+interface MessageImageContent {
+  type: 'image_url';
+  image_url: {
+    url: string;
+  };
+}
+
+type MessageContent = MessageTextContent | MessageImageContent;
+
+interface ImageData {
+  base64: string;
+  name: string;
+  type: string;
+}
+
+interface ChatInputProps {
+  onSendMessage: (content: MessageContent[]) => void;
+  loading?: boolean;
+  visionSupported?: boolean;
+}
+
+const ChatInput: React.FC<ChatInputProps> = ({ 
+  onSendMessage, 
+  loading = false, 
+  visionSupported = false 
+}) => {
+  const [message, setMessage] = useState<string>('');
+  const [images, setImages] = useState<ImageData[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevLoadingRef = useRef<boolean>(loading);
 
   // Function to handle image selection
-  const handleImageChange = (e) => {
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    
     const files = Array.from(e.target.files);
     const remainingSlots = 5 - images.length;
 
     if (files.length > remainingSlots) {
       alert(`You can only add ${remainingSlots > 0 ? remainingSlots : 'no more'} images (max 5).`);
-      // Optionally, only take the allowed number of files
-      // files = files.slice(0, remainingSlots);
     }
 
     const imagePromises = files.slice(0, remainingSlots).map(file => {
-      return new Promise((resolve, reject) => {
-        // Basic validation (optional: check file type, size)
+      return new Promise<ImageData | null>((resolve, reject) => {
+        // Basic validation
         if (!file.type.startsWith('image/')) {
           console.warn(`Skipping non-image file: ${file.name}`);
-          return resolve(null); // Resolve with null to filter out later
+          return resolve(null);
         }
 
         const reader = new FileReader();
         reader.onloadend = () => {
-          // Store base64 string and file name/type for display
-          resolve({ 
-            base64: reader.result, // Includes data:image/jpeg;base64,... prefix
-            name: file.name,
-            type: file.type 
-          });
+          if (typeof reader.result === 'string') {
+            resolve({ 
+              base64: reader.result,
+              name: file.name,
+              type: file.type 
+            });
+          } else {
+            resolve(null);
+          }
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
@@ -42,9 +76,9 @@ function ChatInput({ onSendMessage, loading = false, visionSupported = false }) 
 
     Promise.all(imagePromises)
       .then(newImages => {
-        const validImages = newImages.filter(img => img !== null);
+        const validImages = newImages.filter((img): img is ImageData => img !== null);
         setImages(prev => [...prev, ...validImages]);
-        // Reset file input value to allow selecting the same file again
+        // Reset file input value
         if (fileInputRef.current) fileInputRef.current.value = '';
       })
       .catch(error => {
@@ -55,10 +89,11 @@ function ChatInput({ onSendMessage, loading = false, visionSupported = false }) 
   };
 
   // Function to remove an image
-  const removeImage = (index) => {
+  const removeImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -73,52 +108,61 @@ function ChatInput({ onSendMessage, loading = false, visionSupported = false }) 
     }
   }, []);
 
-  // Focus the textarea when loading changes from true to false (completion finished)
+  // Focus the textarea when loading changes from true to false
   useEffect(() => {
-    // Check if loading just changed from true to false
     if (prevLoadingRef.current && !loading) {
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
     }
-    // Update the ref with current loading state
     prevLoadingRef.current = loading;
   }, [loading]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const textContent = message.trim();
     const hasText = textContent.length > 0;
     const hasImages = images.length > 0;
 
     if ((hasText || hasImages) && !loading) {
-      let contentToSend;
+      let contentToSend: MessageContent[] = [];
+      
       if (hasImages) {
         // Format content as array with text and image parts
-        contentToSend = [
-          // Add text part only if there is text
-          ...(hasText ? [{ type: 'text', text: textContent }] : []),
-          // Add image parts
-          ...images.map(img => ({
+        if (hasText) {
+          const textPart: MessageTextContent = { 
+            type: 'text', 
+            text: textContent 
+          };
+          contentToSend.push(textPart);
+        }
+        
+        // Add image parts
+        images.forEach(img => {
+          const imagePart: MessageImageContent = {
             type: 'image_url',
-            image_url: { url: img.base64 } // Send base64 data URL
-          }))
-        ];
+            image_url: { url: img.base64 }
+          };
+          contentToSend.push(imagePart);
+        });
       } else {
-        // If no images, send only the text string
-        contentToSend = [{ type: 'text', text: textContent }]; // Send as array even for text only
+        // If no images, send only the text string as array
+        contentToSend = [{ 
+          type: 'text' as const, 
+          text: textContent 
+        }];
       }
 
       onSendMessage(contentToSend);
       setMessage('');
-      setImages([]); // Clear images after sending
+      setImages([]);
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      handleSubmit(e as unknown as FormEvent);
     }
   };
 
@@ -159,7 +203,7 @@ function ChatInput({ onSendMessage, loading = false, visionSupported = false }) 
           {visionSupported && images.length < 5 && (
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()} // Trigger file input
+              onClick={() => fileInputRef.current?.click()}
               className="p-3 text-gray-400 hover:text-white transition-colors focus:outline-none" 
               title="Add Image (max 5)"
               disabled={loading}
@@ -216,6 +260,6 @@ function ChatInput({ onSendMessage, loading = false, visionSupported = false }) 
       </div>
     </form>
   );
-}
+};
 
 export default ChatInput; 

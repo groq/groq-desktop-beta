@@ -29,6 +29,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
     "ansi-to-html": "^0.7.2",
+    "classnames": "^2.5.1",
     "electron-json-storage": "^4.6.0",
     "groq-sdk": "0.16.0",
     "node-fetch": "^2.6.6",

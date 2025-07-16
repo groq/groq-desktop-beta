@@ -1,0 +1,129 @@
+/* Main CSS file that imports all other styles */
+
+/* Import design tokens */
+@import './tokens.css';
+
+/* Import reset */
+@import './reset.css';
+
+/* Import utility classes */
+@import './utilities.css';
+
+/* Global styles */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Animation definitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out forwards;
+}
+
+.animate-pulse-once {
+  animation: pulse 1s ease-in-out;
+}
+
+/* Markdown content styling */
+.markdown-content {
+  color: inherit;
+}
+
+.markdown-content p:not(:last-child) {
+  margin-bottom: var(--space-md);
+}
+
+.markdown-content h1 {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-lg) 0 var(--space-md);
+}
+
+.markdown-content h2 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-md) 0 var(--space-sm);
+}
+
+.markdown-content h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-sm) 0 var(--space-xs);
+}
+
+.markdown-content ul, .markdown-content ol {
+  padding-left: var(--space-lg);
+  margin: var(--space-md) 0;
+}
+
+.markdown-content ul {
+  list-style: disc;
+}
+
+.markdown-content ol {
+  list-style: decimal;
+}
+
+.markdown-content code {
+  background-color: var(--color-surface);
+  padding: 0 var(--space-xs);
+  border-radius: var(--border-radius-sm);
+  font-family: monospace;
+}
+
+.markdown-content pre {
+  background-color: var(--color-surface);
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  margin: var(--space-md) 0;
+  overflow: auto;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid var(--color-border);
+  padding-left: var(--space-md);
+  margin: var(--space-md) 0;
+  font-style: italic;
+}
+
+.markdown-content a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  word-break: break-all;
+} 

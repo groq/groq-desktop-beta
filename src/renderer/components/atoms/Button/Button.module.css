@@ -1,0 +1,142 @@
+/* Button.module.css */
+
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 200ms ease;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.small {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.medium {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.large {
+  height: 48px;
+  padding: 0 20px;
+  font-size: 16px;
+}
+
+/* Variants */
+.primary {
+  background-color: #7928CA;
+  color: white;
+}
+
+.primary:hover:not(:disabled) {
+  background-color: #6b22b4;
+}
+
+.primary:active:not(:disabled) {
+  background-color: #5c1c9e;
+}
+
+.secondary {
+  background-color: transparent;
+  border-color: #7928CA;
+  color: #7928CA;
+}
+
+.secondary:hover:not(:disabled) {
+  background-color: rgba(121, 40, 202, 0.05);
+}
+
+.secondary:active:not(:disabled) {
+  background-color: rgba(121, 40, 202, 0.1);
+}
+
+.ghost {
+  background-color: transparent;
+  color: #333;
+}
+
+.ghost:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.ghost:active:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.danger {
+  background-color: #E53E3E;
+  color: white;
+}
+
+.danger:hover:not(:disabled) {
+  background-color: #C53030;
+}
+
+.danger:active:not(:disabled) {
+  background-color: #9B2C2C;
+}
+
+/* Full width */
+.fullWidth {
+  width: 100%;
+}
+
+/* With icon */
+.withIcon .content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+}
+
+/* Loading state */
+.loading .content {
+  visibility: hidden;
+}
+
+.spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+.secondary .spinner, .ghost .spinner {
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #7928CA;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+} 

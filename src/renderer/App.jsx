@@ -86,6 +86,9 @@ function App() {
   const [pendingApprovalCall, setPendingApprovalCall] = useState(null); // Holds the tool call object needing approval
   const [pausedChatState, setPausedChatState] = useState(null); // Holds { currentMessages, finalAssistantMessage, accumulatedResponses }
   // --- End Tool Approval State ---
+  
+  // State for new chat confirmation modal
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
 
   const handleRemoveLastMessage = () => {
     setMessages(prev => {
@@ -812,49 +815,95 @@ function App() {
       setMcpServersStatus({ loading: false, message: "Error refreshing MCP tools" });
     }
   };
+
+  // Function to start a new chat by clearing all states
+  const handleNewChat = () => {
+    // If no messages, no need to confirm
+    if (messages.length === 0) {
+      return;
+    }
+    
+    // Show confirmation modal if there are messages
+    setShowNewChatConfirm(true);
+  };
+  
+  // Function to actually perform the new chat action after confirmation
+  const confirmNewChat = () => {
+    // Clear all messages
+    setMessages([]);
+    
+    // Reset any active states
+    setLoading(false);
+    setPendingApprovalCall(null);
+    setPausedChatState(null);
+    
+    // Close the confirmation modal
+    setShowNewChatConfirm(false);
+    
+    // Scroll to bottom to ensure clean view
+    setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+  };
+
   return (
-    <div className="flex flex-col h-screen">
-      <header className="bg-user-message-bg shadow">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl text-white">
+    <div className="flex flex-col h-screen bg-gray-900">
+      <header className="bg-user-message-bg shadow-md">
+        <div className="max-w-5xl mx-auto py-5 px-8 flex justify-between items-center">
+          <h1 className="text-2xl text-white font-semibold">
             groq<span className="text-primary">desktop</span>
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
+            <button 
+              onClick={handleNewChat}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg border border-gray-700 transition-colors shadow-sm"
+              title="Start a new chat"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>New Chat</span>
+            </button>
             <div className="flex items-center">
               <label htmlFor="model-select" className="mr-3 text-gray-300 font-medium">Model:</label>
               <select
                 id="model-select"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="border border-gray-500 rounded-md text-white"
+                className="border border-gray-600 rounded-lg bg-gray-800 text-white py-2 px-4 focus:ring-2 focus:ring-primary focus:border-transparent shadow-sm"
               >
                 {models.map(model => (
                   <option key={model} value={model}>{model}</option>
                 ))}
               </select>
             </div>
-            <Link to="/settings" className="btn btn-primary">Settings</Link>
+            <Link to="/settings" className="btn btn-primary rounded-lg shadow-sm">Settings</Link>
           </div>
         </div>
       </header>
       
-      <main className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-2">
-          <MessageList 
-            messages={messages} 
-            onToolCallExecute={executeToolCall} 
-            onRemoveLastMessage={handleRemoveLastMessage} 
-          />
-          <div ref={messagesEndRef} />
+      <main className="flex-1 overflow-hidden flex flex-col max-w-5xl mx-auto w-full pb-3">
+        <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-custom">
+          <div className="max-w-4xl mx-auto">
+            <MessageList 
+              messages={messages} 
+              onToolCallExecute={executeToolCall} 
+              onRemoveLastMessage={handleRemoveLastMessage} 
+            />
+            <div ref={messagesEndRef} className="h-4" />
+          </div>
         </div>
         
-        <div className="bg-user-message-bg p-2">
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-3">
+        <div className="bg-user-message-bg p-8 pb-10 shadow-inner rounded-xl relative">
+          <div className="absolute left-1/2 -top-3 transform -translate-x-1/2">
+            <div className="w-24 h-1 bg-gray-700 rounded-full"></div>
+          </div>
+          <div className="max-w-4xl mx-auto flex flex-col gap-5">
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-4">
                 <div className="tools-container">
                   <div 
-                    className="tools-button"
+                    className="tools-button rounded-lg hover:bg-gray-700 p-2.5"
                     onClick={() => {
                       setIsToolsPanelOpen(!isToolsPanelOpen);
                       // Force refresh of MCP tools when opening panel
@@ -915,6 +964,32 @@ function App() {
         />
       )}
       {/* --- End Tool Approval Modal --- */}
+      
+      {/* New Chat Confirmation Modal */}
+      {showNewChatConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full border border-gray-700">
+            <h3 className="text-xl font-medium text-white mb-4">Start a New Chat?</h3>
+            <p className="text-gray-300 mb-6">
+              This will clear your current conversation. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setShowNewChatConfirm(false)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmNewChat}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Clear Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
