@@ -102,7 +102,7 @@ In the settings page, add your Groq API key:
 
 ```json
 {
-  "GROQ_API_KEY": "your-api-key"
+  "GROQ_API_KEY": "your-api-key-here"
 }
 ```
 

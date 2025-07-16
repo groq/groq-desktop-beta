@@ -4,7 +4,6 @@ import { createHashRouter, RouterProvider } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import Settings from './pages/Settings';
-import PopupPage from './pages/PopupPage';
 import { ChatProvider } from './context/ChatContext';
 
 const router = createHashRouter([
@@ -15,10 +14,6 @@ const router = createHashRouter([
   {
     path: '/settings',
     element: <Settings />,
-  },
-  {
-    path: '/popup',
-    element: <PopupPage />,
   },
 ]);
 

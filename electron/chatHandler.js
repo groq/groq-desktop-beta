@@ -34,10 +34,8 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         );
 
         if (hasImages && !modelInfo.vision_supported) {
-            console.error(`ERROR: Attempting to use images with non-vision model: ${modelToUse}`);
-            const errorMessage = `The selected model (${modelToUse}) does not support image inputs. Please select a vision-capable model.`;
-            console.log(`Sending error to frontend: ${errorMessage}`);
-            event.sender.send('chat-stream-error', { error: errorMessage });
+            console.warn(`Attempting to use images with non-vision model: ${modelToUse}`);
+            event.sender.send('chat-stream-error', { error: `The selected model (${modelToUse}) does not support image inputs. Please select a vision-capable model.` });
             return;
         }
 

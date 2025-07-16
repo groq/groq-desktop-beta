@@ -3,6 +3,7 @@ import Message from './Message';
 import MarkdownRenderer from './MarkdownRenderer';
 
 function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) {
+  const [showRemoveButtonIndex, setShowRemoveButtonIndex] = useState(null);
   const [fullScreenImage, setFullScreenImage] = useState(null);
 
   // Effect to handle Escape key for closing fullscreen image
@@ -39,7 +40,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
   const displayMessages = messages.filter(message => message.role !== 'tool');
 
   return (
-    <div className="space-y-2 pt-4 p-4">
+    <div className="space-y-2 pt-4">
       {displayMessages.map((message, index) => (
         <Message 
           key={index} 
@@ -47,9 +48,14 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
           onToolCallExecute={onToolCallExecute}
           allMessages={messages} // Pass all messages for the Message component to find tool results
           isLastMessage={index === displayMessages.length - 1}
+          onRemoveMessage={index === displayMessages.length - 1 ? onRemoveLastMessage : null}
         >
           {message.role === 'user' ? (
-            <div className="flex items-start gap-2">
+            <div 
+              className="flex items-start gap-2"
+              onMouseEnter={() => index === displayMessages.length - 1 && onRemoveLastMessage && setShowRemoveButtonIndex(index)}
+              onMouseLeave={() => setShowRemoveButtonIndex(null)}
+            >
               <div className="flex-1 flex flex-col gap-2"> {/* Use flex-col for text/images */}
                 {/* Check if content is an array (structured) or string (simple text) */}
                 {Array.isArray(message.content) ? (

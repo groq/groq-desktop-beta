@@ -7,9 +7,7 @@ import ToolApprovalModal from './components/ToolApprovalModal';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings, Zap, MessageSquare } from 'lucide-react';
-import { Button } from './components/ui/button';
-import { Badge } from './components/ui/badge';
+
 
 // LocalStorage keys
 const TOOL_APPROVAL_PREFIX = 'tool_approval_';
@@ -88,10 +86,6 @@ function App() {
   const [pendingApprovalCall, setPendingApprovalCall] = useState(null); // Holds the tool call object needing approval
   const [pausedChatState, setPausedChatState] = useState(null); // Holds { currentMessages, finalAssistantMessage, accumulatedResponses }
   // --- End Tool Approval State ---
-
-  // --- Context Sharing State ---
-  const [externalContext, setExternalContext] = useState(null);
-  // --- End Context Sharing State ---
 
   const handleRemoveLastMessage = () => {
     setMessages(prev => {
@@ -432,13 +426,12 @@ function App() {
             });
 
             streamHandler.onError(({ error }) => {
-                console.error('Stream error received:', error);
-                console.log('Error details:', { error });
+                console.error('Stream error:', error);
                 // Replace placeholder with error
                 setMessages(prev => {
                    const newMessages = [...prev];
                    const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
-                   const errorMsg = { role: 'assistant', content: `Error: ${error}`, isStreaming: false };
+                   const errorMsg = { role: 'assistant', content: `Stream Error: ${error}`, isStreaming: false };
                    if (idx !== -1) {
                        newMessages[idx] = errorMsg;
                    } else {
@@ -820,127 +813,108 @@ function App() {
     }
   };
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Modern Sticky Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
-        <div className="flex h-16 items-center justify-between px-6 max-w-full">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <img 
-                src="./groqLogo.png" 
-                alt="Groq Logo" 
-                className="h-8 w-auto"
-              />
-            </div>
-            
-            {/* Status Badge */}
-            {mcpTools.length > 0 && (
-              <Badge variant="secondary" className="ml-4">
-                <Zap className="w-3 h-3 mr-1" />
-                {mcpTools.length} tools
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* New Chat Button - only show when there are messages */}
-            {messages.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setMessages([])}
-                className="text-foreground hover:text-foreground"
+    <div className="flex flex-col h-screen">
+      <header className="bg-user-message-bg shadow">
+        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <h1 className="text-2xl text-white">
+            groq<span className="text-primary">desktop</span>
+          </h1>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center">
+              <label htmlFor="model-select" className="mr-3 text-gray-300 font-medium">Model:</label>
+              <select
+                id="model-select"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="border border-gray-500 rounded-md text-white"
               >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                New Chat
-              </Button>
-            )}
-            
-            <Link to="/settings">
-              <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
+                {models.map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </div>
+            <Link to="/settings" className="btn btn-primary">Settings</Link>
           </div>
         </div>
       </header>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="container px-6 py-8 h-full">
-            <div className="max-w-4xl mx-auto h-full">
-            {messages.length === 0 ? (
-              /* Welcome Screen */
-              <div className="flex flex-col items-center justify-center h-full space-y-8">
-                <div className="text-center space-y-4">
-                  <h1 className="text-4xl font-bold text-primary">
-                    Build Fast
-                  </h1>
-                  <p className="text-xl text-muted-foreground max-w-2xl">
-                    Chat with AI models powered by Groq's lightning-fast inference engine
-                  </p>
-                </div>
-
-                {/* Chat Input */}
-                <div className="w-full max-w-2xl">
-                  <ChatInput
-                    onSendMessage={handleSendMessage}
-                    loading={loading}
-                    visionSupported={visionSupported}
-                    models={models}
-                    selectedModel={selectedModel}
-                    onModelChange={setSelectedModel}
-                    onOpenMcpTools={() => setIsToolsPanelOpen(true)}
-                  />
-                </div>
-              </div>
-            ) : (
-              /* Chat View */
-              <div className="flex flex-col h-full min-h-0">
-                <div className="flex-1 overflow-y-auto mb-6 min-h-0">
-                  <MessageList 
-                    messages={messages} 
-                    onToolCallExecute={executeToolCall} 
-                    onRemoveLastMessage={handleRemoveLastMessage} 
-                  />
-                  <div ref={messagesEndRef} />
-                </div>
-                
-                <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur pt-6">
-                  <ChatInput
-                    onSendMessage={handleSendMessage}
-                    loading={loading}
-                    visionSupported={visionSupported}
-                    models={models}
-                    selectedModel={selectedModel}
-                    onModelChange={setSelectedModel}
-                    onOpenMcpTools={() => setIsToolsPanelOpen(true)}
-                  />
+      
+      <main className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto p-2">
+          <MessageList 
+            messages={messages} 
+            onToolCallExecute={executeToolCall} 
+            onRemoveLastMessage={handleRemoveLastMessage} 
+          />
+          <div ref={messagesEndRef} />
+        </div>
+        
+        <div className="bg-user-message-bg p-2">
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="tools-container">
+                  <div 
+                    className="tools-button"
+                    onClick={() => {
+                      setIsToolsPanelOpen(!isToolsPanelOpen);
+                      // Force refresh of MCP tools when opening panel
+                      if (!isToolsPanelOpen) {
+                        refreshMcpTools();
+                      }
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  {mcpServersStatus.loading && (
+                    <div className="status-indicator loading">
+                      <div className="loading-spinner"></div>
+                      <span>{mcpServersStatus.message}</span>
+                    </div>
+                  )}
+                  {!mcpServersStatus.loading && (
+                    <div className="status-indicator">
+                      <span>{mcpServersStatus.message || "No tools available"}</span>
+                      <button 
+                        className="refresh-button" 
+                        onClick={refreshMcpTools}
+                        title="Refresh MCP tools"
+                      >
+                        <span>↻</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
             </div>
+
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              loading={loading}
+              visionSupported={visionSupported}
+            />
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Modals */}
       {isToolsPanelOpen && (
         <ToolsPanel
           tools={mcpTools}
           onClose={() => setIsToolsPanelOpen(false)}
-                     onDisconnectServer={disconnectMcpServer}
-           onReconnectServer={reconnectMcpServer}
+          onDisconnectServer={disconnectMcpServer}
+          onReconnectServer={reconnectMcpServer}
         />
       )}
 
+      {/* --- Tool Approval Modal --- */}
       {pendingApprovalCall && (
         <ToolApprovalModal
           toolCall={pendingApprovalCall}
-                     onApprove={handleToolApproval}
+          onApprove={handleToolApproval}
         />
       )}
+      {/* --- End Tool Approval Modal --- */}
     </div>
   );
 }
