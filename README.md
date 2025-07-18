@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/groq-groq-desktop-beta-badge.png)](https://mseep.ai/app/groq-groq-desktop-beta)
+
 # Groq Desktop
 
 [![Latest macOS Build](https://img.shields.io/github/v/release/groq/groq-desktop-beta?include_prereleases&label=latest%20macOS%20.dmg%20build)](https://github.com/groq/groq-desktop-beta/releases/latest)
