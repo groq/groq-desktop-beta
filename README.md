@@ -44,6 +44,33 @@ xattr -c /Applications/Groq\ Desktop.app
    pnpm dev
    ```
 
+## Troubleshooting
+
+### Electron Installation Issues
+
+If you encounter an error like "Electron failed to install correctly" when running `pnpm dev`, this is likely because pnpm blocked the build scripts for security reasons. To fix this:
+
+1. Remove the corrupted installation:
+   ```bash
+   rm -rf node_modules
+   ```
+
+2. Reinstall dependencies:
+   ```bash
+   pnpm install
+   ```
+
+3. Approve the build scripts when prompted (or run manually):
+   ```bash
+   pnpm approve-builds
+   ```
+   Select `electron` and `esbuild` when prompted to allow their post-install scripts to run.
+
+4. Try running the dev server again:
+   ```bash
+   pnpm dev
+   ```
+
 ## Building for Production
 
 To build the application for production:
