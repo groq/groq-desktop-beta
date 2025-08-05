@@ -8,8 +8,11 @@ Groq Desktop features MCP server support for all function calling capable models
 > ```sh
 > xattr -c /Applications/Groq\ Desktop.app
 > ```
+<img width="450" alt="Screenshot 2025-08-05 at 11 32 04 AM" src="https://github.com/user-attachments/assets/d4fd9224-8186-4117-bdeb-b477f8a42d49" />
+<br>
+<br>
+<img width="450" alt="Screenshot 2025-08-05 at 11 28 49 AM" src="https://github.com/user-attachments/assets/ced9c517-74f0-46b0-8e91-40ebc88adc3a" />
 
-<img width="450" alt="Screenshot 2025-04-14 at 11 53 18 PM" src="https://github.com/user-attachments/assets/300abf8c-8b7f-4ef8-a5f9-174f93e39506" /><img width="450" alt="Screenshot 2025-04-14 at 11 53 35 PM" src="https://github.com/user-attachments/assets/61641680-5b3d-4ca9-8da4-8e84779f97bb" />
 
 ## Unofficial Homebrew Installation (macOS)
 
