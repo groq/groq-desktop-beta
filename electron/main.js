@@ -35,6 +35,7 @@ const { initializeCommandResolver, resolveCommandPath } = require('./commandReso
 const mcpManager = require('./mcpManager');
 const { initializeWindowManager } = require('./windowManager');
 const authManager = require('./authManager');
+const { initializeConversationHistoryHandlers } = require('./conversationHistoryManager');
 
 // Import context capture system
 const ContextCapture = require('./contextCapture');
@@ -251,6 +252,9 @@ app.whenReady().then(async () => {
 
   // Initialize settings handlers (needs app)
   initializeSettingsHandlers(ipcMain, app);
+
+  // Initialize conversation history handlers (needs app)
+  initializeConversationHistoryHandlers(ipcMain, app);
 
   // Initialize MCP handlers (use module object)
   mcpManager.initializeMcpHandlers(ipcMain, app, mainWindow, loadSettings, resolveCommandPath);

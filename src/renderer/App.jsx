@@ -4,12 +4,14 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ToolsPanel from './components/ToolsPanel';
 import ToolApprovalModal from './components/ToolApprovalModal';
+import ConversationSidebar from './components/ConversationSidebar';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings, Zap, MessageSquare } from 'lucide-react';
+import { Settings, Zap, MessageSquare, History } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
+import { cn } from './lib/utils';
 
 // LocalStorage keys
 const TOOL_APPROVAL_PREFIX = 'tool_approval_';
@@ -67,11 +69,19 @@ const setToolApprovalStatus = (toolName, status) => {
 
 function App() {
   // const [messages, setMessages] = useState([]); // Remove local state
-  const { messages, setMessages } = useChat(); // Use context state
+  const { 
+    messages, 
+    setMessages, 
+    saveCurrentConversation,
+    startNewConversation,
+    refreshConversationsList,
+    currentConversationId
+  } = useChat(); // Use context state
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
   const [mcpTools, setMcpTools] = useState([]);
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mcpServersStatus, setMcpServersStatus] = useState({ loading: false, message: "" });
   const messagesEndRef = useRef(null);
   // Store the list of models from capabilities keys
@@ -99,6 +109,27 @@ function App() {
       // Create a copy without the last message
       return prev.slice(0, prev.length - 1);
     });
+  };
+
+  // Auto-save conversation when messages change
+  useEffect(() => {
+    // Only auto-save if we have messages and are not currently loading
+    if (messages.length > 0 && !loading && selectedModel) {
+      const saveTimeout = setTimeout(async () => {
+        const result = await saveCurrentConversation({ model: selectedModel });
+        if (result.success) {
+          // Refresh conversations list after successful save
+          refreshConversationsList();
+        }
+      }, 2000); // Auto-save after 2 seconds of inactivity
+
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [messages, loading, selectedModel, saveCurrentConversation, refreshConversationsList]);
+
+  // Function to handle new conversation
+  const handleNewConversation = () => {
+    startNewConversation();
   };
   
   // Models list derived from capabilities keys
@@ -875,57 +906,67 @@ function App() {
     }
   };
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Modern Sticky Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
-        <div className="flex h-16 items-center justify-between px-6 max-w-full">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <img 
-                src="./groqLogo.png" 
-                alt="Groq Logo" 
-                className="h-8 w-auto"
-              />
+    <div className="flex h-screen bg-background">
+      {/* Conversation Sidebar */}
+      <ConversationSidebar 
+        isOpen={isSidebarOpen} 
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)} 
+      />
+
+      {/* Main App Area */}
+      <div className={cn(
+        "flex flex-col flex-1 transition-all duration-300 ease-in-out",
+        isSidebarOpen ? "ml-80" : "ml-0"
+      )}>
+        {/* Modern Sticky Header */}
+        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
+          <div className="flex h-16 items-center justify-between px-6 max-w-full">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <img 
+                  src="./groqLogo.png" 
+                  alt="Groq Logo" 
+                  className="h-8 w-auto"
+                />
+              </div>
+              
+              {/* Status Badge */}
+              {mcpTools.length > 0 && (
+                <Badge variant="secondary" className="ml-4">
+                  <Zap className="w-3 h-3 mr-1" />
+                  {mcpTools.length} tools
+                </Badge>
+              )}
             </div>
-            
-            {/* Status Badge */}
-            {mcpTools.length > 0 && (
-              <Badge variant="secondary" className="ml-4">
-                <Zap className="w-3 h-3 mr-1" />
-                {mcpTools.length} tools
-              </Badge>
-            )}
-          </div>
 
-          <div className="flex items-center space-x-2">
-            {/* New Chat Button - only show when there are messages */}
-            {messages.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setMessages([])}
-                className="text-foreground hover:text-foreground"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                New Chat
-              </Button>
-            )}
-            
-            <Link to="/settings">
-              <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
+            <div className="flex items-center space-x-2">
+              {/* New Chat Button - only show when there are messages */}
+              {messages.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleNewConversation}
+                  className="text-foreground hover:text-foreground"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  New Chat
+                </Button>
+              )}
+              
+              <Link to="/settings">
+                <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      {/* TODO: Make the scroll area the entire width instead of the container while keeping the input at the bottom*/}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="container py-8 h-full">
-            <div className="max-w-4xl mx-auto h-full">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="container py-8 h-full">
+              <div className="max-w-4xl mx-auto h-full">
             {messages.length === 0 ? (
               /* Welcome Screen */
               <div className="flex flex-col items-center justify-center h-full space-y-8">
@@ -976,6 +1017,7 @@ function App() {
                 </div>
               </div>
             )}
+              </div>
             </div>
           </div>
         </div>

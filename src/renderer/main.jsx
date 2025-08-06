@@ -7,10 +7,17 @@ import Settings from './pages/Settings';
 import PopupPage from './pages/PopupPage';
 import { ChatProvider } from './context/ChatContext';
 
+// Wrap components with ChatProvider where needed
+const AppWithProvider = () => (
+  <ChatProvider>
+    <App />
+  </ChatProvider>
+);
+
 const router = createHashRouter([
   {
     path: '/',
-    element: <App />,
+    element: <AppWithProvider />,
   },
   {
     path: '/settings',
@@ -18,14 +25,16 @@ const router = createHashRouter([
   },
   {
     path: '/popup',
-    element: <PopupPage />,
+    element: (
+      <ChatProvider>
+        <PopupPage />
+      </ChatProvider>
+    ),
   },
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ChatProvider>
-      <RouterProvider router={router} />
-    </ChatProvider>
+    <RouterProvider router={router} />
   </React.StrictMode>
 ); 
