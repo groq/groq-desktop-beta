@@ -22,6 +22,12 @@ function Settings() {
     customCompletionUrl: '',
     toolOutputLimit: 8000,
     maxConversations: 50
+    customApiBaseUrl: '',
+    customModels: {},
+    builtInTools: {
+      codeInterpreter: false,
+      browserSearch: false
+    }
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -40,6 +46,14 @@ function Settings() {
   const [settingsPath, setSettingsPath] = useState('');
   const [newEnvVar, setNewEnvVar] = useState({ key: '', value: '' });
   const [editingServerId, setEditingServerId] = useState(null);
+  const [newCustomModel, setNewCustomModel] = useState({
+    id: '',
+    displayName: '',
+    context: 8192,
+    vision_supported: false,
+    builtin_tools_supported: false
+  });
+  const [editingModelId, setEditingModelId] = useState(null);
   
   const statusTimeoutRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -50,6 +64,12 @@ function Settings() {
         const settingsData = await window.electron.getSettings();
         if (!settingsData.disabledMcpServers) {
             settingsData.disabledMcpServers = [];
+        }
+        if (!settingsData.builtInTools) {
+            settingsData.builtInTools = {
+                codeInterpreter: false,
+                browserSearch: false
+            };
         }
         setSettings(settingsData);
       } catch (error) {
@@ -66,6 +86,12 @@ function Settings() {
             customCompletionUrl: '',
             toolOutputLimit: 8000,
             maxConversations: 50
+            customApiBaseUrl: '',
+            customModels: {},
+            builtInTools: {
+                codeInterpreter: false,
+                browserSearch: false
+            }
         }));
       }
     };
@@ -133,6 +159,18 @@ function Settings() {
 
   const handleToggleChange = (name, checked) => {
     const updatedSettings = { ...settings, [name]: checked };
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+  };
+
+  const handleBuiltInToolToggle = (toolName, checked) => {
+    const updatedSettings = {
+      ...settings,
+      builtInTools: {
+        ...settings.builtInTools,
+        [toolName]: checked
+      }
+    };
     setSettings(updatedSettings);
     saveSettings(updatedSettings);
   };
@@ -537,6 +575,92 @@ function Settings() {
     setJsonError(null);
   };
 
+  // Custom Model Management Functions
+  const handleNewCustomModelChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setNewCustomModel(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : (name === 'context' ? parseInt(value) || 8192 : value)
+    }));
+  };
+
+  const handleSaveCustomModel = (e) => {
+    e.preventDefault();
+    
+    if (!newCustomModel.id.trim()) {
+      setSaveStatus({ type: 'error', message: 'Model ID is required' });
+      return;
+    }
+
+    if (!newCustomModel.displayName.trim()) {
+      setSaveStatus({ type: 'error', message: 'Model display name is required' });
+      return;
+    }
+
+    // Create the model configuration
+    const modelConfig = {
+      displayName: newCustomModel.displayName.trim(),
+      context: newCustomModel.context,
+      vision_supported: newCustomModel.vision_supported,
+      builtin_tools_supported: newCustomModel.builtin_tools_supported
+    };
+
+    console.log('Saving custom model:', newCustomModel.id, 'with config:', modelConfig);
+    
+    // Update settings with new/updated custom model
+    const updatedSettings = {
+      ...settings,
+      customModels: {
+        ...settings.customModels,
+        [newCustomModel.id]: modelConfig
+      }
+    };
+
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+    
+    // Clear the form
+    setNewCustomModel({ id: '', displayName: '', context: 8192, vision_supported: false, builtin_tools_supported: false });
+    setEditingModelId(null);
+  };
+
+  const removeCustomModel = (modelId) => {
+    const updatedCustomModels = { ...settings.customModels };
+    delete updatedCustomModels[modelId];
+    
+    const updatedSettings = {
+      ...settings,
+      customModels: updatedCustomModels
+    };
+    
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+
+    // If the removed model was being edited, cancel the edit
+    if (editingModelId === modelId) {
+      cancelModelEditing();
+    }
+  };
+
+  const startModelEditing = (modelId) => {
+    const modelToEdit = settings.customModels[modelId];
+    if (!modelToEdit) return;
+
+    setEditingModelId(modelId);
+    setNewCustomModel({
+      id: modelId,
+      displayName: modelToEdit.displayName || '',
+      context: modelToEdit.context || 8192,
+      vision_supported: modelToEdit.vision_supported || false,
+      builtin_tools_supported: modelToEdit.builtin_tools_supported || false
+    });
+  };
+
+  const cancelModelEditing = () => {
+    setEditingModelId(null);
+    setNewCustomModel({ id: '', displayName: '', context: 8192, vision_supported: false, builtin_tools_supported: false });
+  };
+
   const getStatusMessage = () => {
     if (isSaving) return 'Saving...';
     return saveStatus?.message || '';
@@ -602,7 +726,7 @@ function Settings() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between px-6">
@@ -657,7 +781,7 @@ function Settings() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main>
         <div className="container px-6 py-8">
           <div className="max-w-4xl mx-auto space-y-8">
             
@@ -678,10 +802,10 @@ function Settings() {
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Key className="h-5 w-5 text-primary" />
-                  <span>Groq API Configuration</span>
+                  <span>API Configuration</span>
                 </CardTitle>
                 <CardDescription>
-                  Configure your Groq API key to enable AI model access
+                  Configure your API credentials and endpoint settings
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -694,7 +818,7 @@ function Settings() {
                       name="GROQ_API_KEY"
                       value={settings.GROQ_API_KEY || ''}
                       onChange={handleChange}
-                      placeholder="Enter your GROQ API key"
+                      placeholder="Enter your API key"
                       className="pr-10"
                     />
                     <Button
@@ -707,6 +831,22 @@ function Settings() {
                       {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="custom-api-base-url">Custom API Base URL (Optional)</Label>
+                  <Input
+                    type="text"
+                    id="custom-api-base-url"
+                    name="customApiBaseUrl"
+                    value={settings.customApiBaseUrl || ''}
+                    onChange={handleChange}
+                    placeholder="e.g., https://api.openai.com/v1 or http://127.0.0.1:8000/api"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Override the default API endpoint. You can include '/openai/v1' in the URL or just the base path. 
+                    The system will automatically handle the correct endpoint construction. Leave empty to use the default Groq API.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -785,6 +925,55 @@ function Settings() {
                     checked={settings.popupEnabled}
                     onChange={(e) => handleToggleChange('popupEnabled', e.target.checked)}
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Built-in Tools Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <span>Built-in Tools</span>
+                </CardTitle>
+                <CardDescription>
+                  Enable built-in tools for supported models (OpenAI and Emberfow models only).
+                  These tools don't require MCP servers and work directly with the model.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="code-interpreter" className="font-medium">
+                        Code Interpreter
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Run Python code for calculations, data analysis, and more
+                      </p>
+                    </div>
+                    <Switch
+                      id="code-interpreter"
+                      checked={settings.builtInTools?.codeInterpreter || false}
+                      onChange={(e) => handleBuiltInToolToggle('codeInterpreter', e.target.checked)}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="browser-search" className="font-medium">
+                        Browser Search
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Search the web for real-time information and current events
+                      </p>
+                    </div>
+                    <Switch
+                      id="browser-search"
+                      checked={settings.builtInTools?.browserSearch || false}
+                      onChange={(e) => handleBuiltInToolToggle('browserSearch', e.target.checked)}
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1109,6 +1298,206 @@ function Settings() {
                 <p className="text-xs text-muted-foreground mt-2">
                   This will remove all saved tool approval preferences and prompt you again for each tool
                 </p>
+              </CardContent>
+            </Card>
+
+            {/* Custom Models */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Cpu className="h-5 w-5 text-primary" />
+                  <span>Custom Models</span>
+                </CardTitle>
+                <CardDescription>
+                  Define custom AI models with their context sizes and capabilities
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Configured Custom Models List */}
+                {Object.keys(settings.customModels || {}).length > 0 ? (
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm">Configured Custom Models</h4>
+                    <div className="space-y-3">
+                      {Object.entries(settings.customModels || {}).map(([id, config]) => (
+                        <Card key={id} className="border-border/50">
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1 space-y-2">
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="secondary">{config.displayName || id}</Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {config.context?.toLocaleString() || '8,192'} tokens
+                                  </Badge>
+                                  {config.vision_supported && (
+                                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                                      Vision
+                                    </Badge>
+                                  )}
+                                  {config.builtin_tools_supported && (
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                                      Built-in Tools
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                <div className="text-sm text-muted-foreground font-mono">
+                                  Model ID: {id}
+                                </div>
+                              </div>
+                              
+                              <div className="flex space-x-2 ml-4">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => startModelEditing(id)}
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => removeCustomModel(id)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Cpu className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No custom models configured</p>
+                    <p className="text-sm">Add a custom model below to get started</p>
+                  </div>
+                )}
+
+                {/* Add New Custom Model Section */}
+                <div className="border-t pt-6 space-y-4">
+                  <h4 className="font-medium text-sm flex items-center space-x-2">
+                    <Plus className="h-4 w-4" />
+                    <span>{editingModelId ? 'Edit Custom Model' : 'Add New Custom Model'}</span>
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="model-id">Model ID</Label>
+                      <Input
+                        id="model-id"
+                        name="id"
+                        value={newCustomModel.id}
+                        onChange={handleNewCustomModelChange}
+                        placeholder="e.g., my-custom-model, local/llama-7b"
+                        disabled={editingModelId !== null}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Unique identifier for the model (cannot be changed after creation)
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="model-display-name">Display Name</Label>
+                      <Input
+                        id="model-display-name"
+                        name="displayName"
+                        value={newCustomModel.displayName}
+                        onChange={handleNewCustomModelChange}
+                        placeholder="e.g., My Custom Model, Local Llama 7B"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Friendly name shown in the model selector
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="model-context">Context Size (tokens)</Label>
+                      <Input
+                        id="model-context"
+                        name="context"
+                        type="number"
+                        value={newCustomModel.context}
+                        onChange={handleNewCustomModelChange}
+                        placeholder="8192"
+                        min="1024"
+                        max="1000000"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum number of tokens the model can process
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="model-vision">Capabilities</Label>
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="model-vision"
+                            name="vision_supported"
+                            checked={newCustomModel.vision_supported}
+                            onChange={handleNewCustomModelChange}
+                            className="rounded border-gray-300"
+                          />
+                          <Label htmlFor="model-vision" className="text-sm font-normal">
+                            Supports vision/image inputs
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="model-builtin-tools"
+                            name="builtin_tools_supported"
+                            checked={newCustomModel.builtin_tools_supported}
+                            onChange={handleNewCustomModelChange}
+                            className="rounded border-gray-300"
+                          />
+                          <Label htmlFor="model-builtin-tools" className="text-sm font-normal">
+                            Supports built-in tools (code interpreter, browser search)
+                          </Label>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enable capabilities based on what the model supports
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2">
+                    {editingModelId && (
+                      <Button
+                        variant="outline"
+                        onClick={cancelModelEditing}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setNewCustomModel({
+                          id: '', displayName: '', context: 8192, vision_supported: false, builtin_tools_supported: false
+                        });
+                        setEditingModelId(null);
+                      }}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Clear
+                    </Button>
+                    <Button
+                      onClick={handleSaveCustomModel}
+                      disabled={!newCustomModel.id || !newCustomModel.displayName}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {editingModelId ? 'Update Model' : 'Add Model'}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

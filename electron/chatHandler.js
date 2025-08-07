@@ -1,5 +1,6 @@
 const Groq = require('groq-sdk');
 const { pruneMessageHistory } = require('./messageUtils');
+const { supportsBuiltInTools } = require('../shared/models');
 
 function validateApiKey(settings) {
     if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
@@ -86,10 +87,30 @@ function cleanMessages(messages) {
     });
 }
 
-function buildApiParams(prunedMessages, modelToUse, settings, tools) {
+function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContextSizes) {
     let systemPrompt = "You are a helpful assistant capable of using tools. Use tools only when necessary and relevant to the user's request. Format responses using Markdown.";
     if (settings.customSystemPrompt && settings.customSystemPrompt.trim()) {
         systemPrompt += `\n\n${settings.customSystemPrompt.trim()}`;
+    }
+
+    // Prepare built-in tools if enabled and supported by the model
+    const builtInTools = [];
+    if (supportsBuiltInTools(modelToUse, modelContextSizes) && settings.builtInTools) {
+        if (settings.builtInTools.codeInterpreter) {
+            builtInTools.push({ type: "code_interpreter" });
+            console.log('Code interpreter tool enabled for model:', modelToUse);
+        }
+        if (settings.builtInTools.browserSearch) {
+            builtInTools.push({ type: "browser_search" });
+            console.log('Browser search tool enabled for model:', modelToUse);
+        }
+    }
+
+    // Combine MCP tools and built-in tools
+    const allTools = [...tools];
+    if (builtInTools.length > 0) {
+        // For built-in tools, we add them directly (not as functions)
+        allTools.push(...builtInTools);
     }
 
     return {
@@ -97,7 +118,7 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools) {
         model: modelToUse,
         temperature: settings.temperature ?? 0.7,
         top_p: settings.top_p ?? 0.95,
-        ...(tools.length > 0 && { tools, tool_choice: "auto" }),
+        ...(allTools.length > 0 && { tools: allTools, tool_choice: "auto" }),
         stream: true
     };
 }
@@ -138,14 +159,20 @@ function processStreamChunk(chunk, event, accumulatedData) {
 
             if (!existingTool) {
                 // First delta: tool starts executing
-                accumulatedData.executedTools.push({
+                const newTool = {
                     index: executedTool.index,
                     type: executedTool.type,
                     arguments: executedTool.arguments || "",
                     output: executedTool.output || null,
                     name: executedTool.name || "",
                     search_results: executedTool.search_results || null
-                });
+                };
+                accumulatedData.executedTools.push(newTool);
+                
+                console.log(`[Tool Execution Start] Index: ${executedTool.index}, Type: ${executedTool.type}, Name: ${executedTool.name}`);
+                if (executedTool.arguments) {
+                    console.log(`[Tool Arguments] Index: ${executedTool.index}:`, executedTool.arguments);
+                }
 
                 event.sender.send('chat-stream-tool-execution', {
                     type: 'start',
@@ -158,16 +185,37 @@ function processStreamChunk(chunk, event, accumulatedData) {
                 });
             } else {
                 // Second delta: tool execution completes with output
+                // Only update output and search_results, NOT arguments or name (they should already be set from start)
+                
+                // Log a warning if arguments or name are being sent in completion delta (they shouldn't be)
+                if (executedTool.arguments && executedTool.arguments !== existingTool.arguments) {
+                    console.warn(`[WARNING] Tool completion delta contains different arguments! Index: ${executedTool.index}`);
+                    console.warn(`  Existing arguments: ${existingTool.arguments}`);
+                    console.warn(`  Delta arguments (ignored): ${executedTool.arguments}`);
+                }
+                if (executedTool.name && executedTool.name !== existingTool.name) {
+                    console.warn(`[WARNING] Tool completion delta contains different name! Index: ${executedTool.index}`);
+                    console.warn(`  Existing name: ${existingTool.name}`);
+                    console.warn(`  Delta name (ignored): ${executedTool.name}`);
+                }
+                
+                // Only update output and search_results
+                if (executedTool.search_results) existingTool.search_results = executedTool.search_results;
                 if (executedTool.output !== undefined) {
                     existingTool.output = executedTool.output;
+                    
+                    console.log(`[Tool Execution Complete] Index: ${existingTool.index}, Type: ${existingTool.type}, Name: ${existingTool.name}`);
+                    console.log(`[Tool Arguments Preserved] Index: ${existingTool.index}:`, existingTool.arguments);
+                    if (existingTool.output) {
+                        console.log(`[Tool Output] Index: ${existingTool.index}:`, existingTool.output.substring(0, 200) + (existingTool.output.length > 200 ? '...' : ''));
+                    }
+                    
+                    // Send complete event with fully updated tool data
                     event.sender.send('chat-stream-tool-execution', {
                         type: 'complete',
                         tool: existingTool
                     });
                 }
-                if (executedTool.arguments) existingTool.arguments = executedTool.arguments;
-                if (executedTool.name) existingTool.name = executedTool.name;
-                if (executedTool.search_results) existingTool.search_results = executedTool.search_results;
             }
         }
     }
@@ -290,11 +338,29 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
             return;
         }
 
-        const groq = new Groq({ apiKey: settings.GROQ_API_KEY });
+        const groqConfig = { apiKey: settings.GROQ_API_KEY };
+        
+        // Use custom API base URL if provided
+        if (settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
+            let customBaseUrl = settings.customApiBaseUrl.trim();
+            
+            // Remove trailing slash if present
+            customBaseUrl = customBaseUrl.replace(/\/$/, '');
+            
+            // If the URL ends with /openai/v1, remove it since the Groq SDK will append it
+            if (customBaseUrl.endsWith('/openai/v1')) {
+                customBaseUrl = customBaseUrl.replace(/\/openai\/v1$/, '');
+            }
+            
+            groqConfig.baseURL = customBaseUrl;
+            console.log(`Using custom base URL: ${customBaseUrl} (Groq SDK will append /openai/v1/chat/completions)`);
+        }
+        
+        const groq = new Groq(groqConfig);
         const tools = prepareTools(discoveredTools);
         const cleanedMessages = cleanMessages(messages);
         const prunedMessages = pruneMessageHistory(cleanedMessages, modelToUse, modelContextSizes);
-        const chatCompletionParams = buildApiParams(prunedMessages, modelToUse, settings, tools);
+        const chatCompletionParams = buildApiParams(prunedMessages, modelToUse, settings, tools, modelContextSizes);
 
         await executeStreamWithRetry(groq, chatCompletionParams, event);
     } catch (outerError) {

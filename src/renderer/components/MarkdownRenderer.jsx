@@ -173,18 +173,29 @@ const components = {
             );
           },
         }
-function MarkdownRenderer({ content }) {
-  content=content.replace(/\\\[/g, "$$$$")
-    .replace(/\\\]/g, "$$$$")
-    .replace(/\\\(/g, "$$")
-    .replace(/\\\)/g, "$$")
-    .replace(/```latex([\s\S]*?)```/g, "$$$$$1$$$$");
+function MarkdownRenderer({ content, disableMath = false }) {
+  // Filter out reference lines like 【4†L24-L30】【4†L32-L35】
+  content = content.replace(/【\d+†L\d+-L\d+】/g, '');
+  
+  // Only process LaTeX if math rendering is enabled
+  if (!disableMath) {
+    content = content.replace(/\\\[/g, "$$$$")
+      .replace(/\\\]/g, "$$$$")
+      .replace(/\\\(/g, "$$")
+      .replace(/\\\)/g, "$$")
+      .replace(/```latex([\s\S]*?)```/g, "$$$$$1$$$$");
+  }
+
+  // Conditionally include math plugins based on disableMath prop
+  const remarkPlugins = disableMath ? [remarkGfm] : [remarkGfm, remarkMath];
+  const rehypePlugins = disableMath ? [] : [rehypeKatex];
+  
   return (
     <div className="font-inter">
       <ReactMarkdown
         components={components}
-        remarkPlugins={[remarkGfm, remarkMath]} // Enable GitHub Flavored Markdown
-        rehypePlugins={[rehypeKatex]}
+        remarkPlugins={remarkPlugins} // Enable GitHub Flavored Markdown, conditionally enable math
+        rehypePlugins={rehypePlugins}
       >
         {content}
       </ReactMarkdown>

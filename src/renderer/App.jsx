@@ -463,17 +463,24 @@ function App() {
                 if (existingIndex === -1) {
                     updatedLiveTools.push(tool);
                 } else {
+                    // Merge tool data to preserve any existing properties
                     updatedLiveTools[existingIndex] = { ...updatedLiveTools[existingIndex], ...tool };
                 }
                 
                 finalAssistantData.liveExecutedTools = updatedLiveTools;
             } else if (type === 'complete') {
-                // Update tool with output
+                // Update tool with complete data including output
                 const updatedLiveTools = [...finalAssistantData.liveExecutedTools];
                 const existingIndex = updatedLiveTools.findIndex(t => t.index === tool.index);
                 
                 if (existingIndex !== -1) {
+                    // Replace with complete tool data from backend
                     updatedLiveTools[existingIndex] = tool;
+                    finalAssistantData.liveExecutedTools = updatedLiveTools;
+                } else {
+                    // Handle case where complete event arrives before start (shouldn't happen but defensive)
+                    console.warn(`Received complete event for tool index ${tool.index} without corresponding start event`);
+                    updatedLiveTools.push(tool);
                     finalAssistantData.liveExecutedTools = updatedLiveTools;
                 }
             }
@@ -990,6 +997,7 @@ function App() {
                     selectedModel={selectedModel}
                     onModelChange={setSelectedModel}
                     onOpenMcpTools={() => setIsToolsPanelOpen(true)}
+                    modelConfigs={modelConfigs}
                   />
                 </div>
               </div>
@@ -1014,6 +1022,7 @@ function App() {
                     selectedModel={selectedModel}
                     onModelChange={setSelectedModel}
                     onOpenMcpTools={() => setIsToolsPanelOpen(true)}
+                    modelConfigs={modelConfigs}
                   />
                 </div>
               </div>

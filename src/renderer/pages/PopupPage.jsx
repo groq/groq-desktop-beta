@@ -22,16 +22,27 @@ const ContextPill = ({ title, onRemove }) => (
   </Badge>
 );
 
-const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact = false }) => {
+const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact = false, modelConfigs = {} }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   const getDisplayName = (model) => {
+    const modelInfo = modelConfigs[model];
+    let displayName = model;
+    
+    // Use custom display name if available
+    if (modelInfo && modelInfo.displayName) {
+      displayName = modelInfo.displayName;
+    } else {
+      // If no explicit displayName is configured, return the raw model name without auto-capitalization
+      displayName = model;
+    }
+    
     if (isCompact) {
       // For compact view, show a shortened version
-      const parts = model.split('/');
-      return parts[parts.length - 1].split('-').slice(0, 2).join('-');
+      const words = displayName.split(' ');
+      return words.slice(0, 2).join(' ');
     }
-    return model;
+    return displayName;
   };
 
   return (
@@ -72,7 +83,7 @@ const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact =
                 }}
                 className="w-full px-3 py-2 text-xs text-left hover:bg-accent hover:text-accent-foreground flex items-center justify-between"
               >
-                <span className="truncate">{model}</span>
+                <span className="truncate">{getDisplayName(model)}</span>
                 {selectedModel === model && <Check size={12} className="ml-2 shrink-0" />}
               </button>
             ))}
@@ -96,6 +107,7 @@ const PopupPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
   const [models, setModels] = useState([]);
+  const [modelConfigs, setModelConfigs] = useState({});
   const [showContext, setShowContext] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [files, setFiles] = useState([]);
@@ -194,14 +206,15 @@ const PopupPage = () => {
   const initializePopup = async () => {
     try {
       // Load model configurations
-      const modelConfigs = await window.electron.getModelConfigs();
-      const availableModels = Object.keys(modelConfigs).filter(key => key !== 'default');
+      const configs = await window.electron.getModelConfigs();
+      setModelConfigs(configs);
+      const availableModels = Object.keys(configs).filter(key => key !== 'default');
       setModels(availableModels);
       
       if (availableModels.length > 0) {
         setSelectedModel(availableModels[0]);
         // Check if the selected model supports vision
-        const modelInfo = modelConfigs[availableModels[0]];
+        const modelInfo = configs[availableModels[0]];
         setVisionSupported(modelInfo?.vision_supported || false);
       }
 
@@ -575,6 +588,7 @@ const PopupPage = () => {
                   selectedModel={selectedModel}
                   models={models}
                   onModelChange={handleModelChange}
+                  modelConfigs={modelConfigs}
                 />
               </div>
             </div>
@@ -639,6 +653,7 @@ const PopupPage = () => {
                   models={models}
                   onModelChange={handleModelChange}
                   isCompact={true}
+                  modelConfigs={modelConfigs}
                 />
               </div>
             )}

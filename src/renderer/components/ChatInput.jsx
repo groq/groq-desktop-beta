@@ -20,6 +20,7 @@ function ChatInput({
 	selectedModel = "",
 	onModelChange,
 	onOpenMcpTools,
+	modelConfigs = {},
 }) {
 	const [message, setMessage] = useState("");
 	const [suggestion, setSuggestion] = useState("");
@@ -28,6 +29,19 @@ function ChatInput({
 	const { messages, activeContext } = useContext(ChatContext);
 
 	const [files, setFiles] = useState([]); // Changed from images to files to handle all file types
+	const [textareaHeight, setTextareaHeight] = useState(null);
+	const [rowHeight, setRowHeight] = useState(null);
+
+	// Helper function to get display name for a model
+	const getModelDisplayName = (modelId) => {
+		const modelInfo = modelConfigs[modelId];
+		if (modelInfo && modelInfo.displayName) {
+			return modelInfo.displayName;
+		}
+		
+		// If no explicit displayName is configured, return the raw modelId without auto-capitalization
+		return modelId;
+	};
 	const [isDragOver, setIsDragOver] = useState(false);
 	const [fullScreenImage, setFullScreenImage] = useState(null);
 	const textareaRef = useRef(null);
@@ -145,12 +159,7 @@ function ChatInput({
 		}
 	};
 
-	useEffect(() => {
-		if (textareaRef.current) {
-			textareaRef.current.style.height = "auto";
-			textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-		}
-	}, [message]);
+
 
 	// Focus the textarea after component mounts
 	useEffect(() => {
@@ -257,6 +266,32 @@ function ChatInput({
 		}
 	};
 
+	// Handle paste events to ensure textarea resizes properly
+	const handlePaste = (e) => {
+		// Don't prevent default - let the paste happen naturally
+		// Just ensure the textarea resizes properly after paste
+		setTimeout(() => {
+			// Force a resize check after paste completes
+			if (textareaRef.current && textareaRef.current._resizeComponent) {
+				textareaRef.current._resizeComponent();
+			}
+		}, 0);
+	};
+
+	// Handle height changes to track when resizing occurs
+	const handleHeightChange = (height, info) => {
+		// Track the current height and row height
+		setTextareaHeight(height);
+		if (info && info.rowHeight) {
+			setRowHeight(info.rowHeight);
+		}
+	};
+
+	// Calculate if we're at max height (10 rows + padding)
+	// Account for padding (py-3 = 0.75rem * 2 = 1.5rem = 24px at default font size)
+	const maxHeightThreshold = rowHeight ? (rowHeight * 10) + 24 : null;
+	const isAtMaxHeight = textareaHeight && maxHeightThreshold && textareaHeight >= maxHeightThreshold;
+
 	return (
     <div 
 			className={cn(
@@ -325,21 +360,32 @@ function ChatInput({
 
 			<div className="flex flex-col gap-3">
 				{/* Input Area with Submit Button */}
-				<div className="flex items-end gap-3">
+				<div className="flex items-center gap-3">
 					<div className="flex-1 relative">
 						<TextAreaAutosize
 							ref={textareaRef}
 							value={message}
 							onChange={(e) => setMessage(e.target.value)}
 							onKeyDown={handleKeyDown}
+							onPaste={handlePaste}
+							onHeightChange={handleHeightChange}
 							placeholder={isDragOver ? "Drop files here..." : "Ask Groq anything..."}
 							className={cn(
 								"w-full px-4 py-3 bg-background/80 backdrop-blur-sm resize-none border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring/50 transition-all duration-200",
 								isDragOver 
 									? "border-primary/50 bg-primary/5" 
-									: "border-border/50"
+									: "border-border/50",
+								// Control overflow based on whether we're at max height
+								isAtMaxHeight ? "overflow-y-auto" : "overflow-y-hidden"
 							)}
-							rows={1}
+							style={{
+								// Ensure smooth scrollbar appearance
+								scrollbarWidth: 'thin',
+								scrollbarGutter: 'stable'
+							}}
+							minRows={1}
+							maxRows={10}
+							cacheMeasurements={true}
 							disabled={loading}
 						/>
 						{/* Drag overlay */}
@@ -352,18 +398,20 @@ function ChatInput({
 							</div>
 						)}
 					</div>
-					<Button
-						type="submit"
-						size="icon"
-						className="h-12 w-12 rounded-2xl bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-						disabled={loading || (!message.trim() && files.length === 0)}
-					>
-						{loading ? (
-							<Loader2 className="w-5 h-5 animate-spin" />
-						) : (
-							<ArrowUp className="w-5 h-5" aria-hidden="true" />
-						)}
-					</Button>
+					<div className="self-start">
+						<Button
+							type="submit"
+							size="icon"
+							className="h-12 w-12 rounded-2xl bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+							disabled={loading || (!message.trim() && files.length === 0)}
+						>
+							{loading ? (
+								<Loader2 className="w-5 h-5 animate-spin" />
+							) : (
+								<ArrowUp className="w-5 h-5" aria-hidden="true" />
+							)}
+						</Button>
+					</div>
 				</div>
 
 				{/* Bottom Controls */}
@@ -423,12 +471,14 @@ function ChatInput({
 						{/* Model Selector */}
 						<Select value={selectedModel} onValueChange={onModelChange}>
 							<SelectTrigger className="w-48 h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
-								<SelectValue placeholder="Select model" className="text-foreground" />
+								<SelectValue placeholder="Select model" className="text-foreground">
+									{selectedModel ? getModelDisplayName(selectedModel) : "Select model"}
+								</SelectValue>
 							</SelectTrigger>
 							<SelectContent className="rounded-xl">
 								{models.map(model => (
 									<SelectItem key={model} value={model} className="rounded-lg text-foreground">
-										{model}
+										{getModelDisplayName(model)}
 									</SelectItem>
 								))}
 							</SelectContent>

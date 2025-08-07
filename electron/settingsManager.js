@@ -23,6 +23,8 @@ function loadSettings() {
             customCompletionUrl: '',
             toolOutputLimit: 8000,
             maxConversations: 50
+            customApiBaseUrl: '',
+            customModels: {}
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -39,6 +41,8 @@ function loadSettings() {
         customCompletionUrl: '',
         toolOutputLimit: 8000,
         maxConversations: 50
+        customApiBaseUrl: '',
+        customModels: {}
     };
 
     try {
@@ -76,6 +80,8 @@ function loadSettings() {
             settings.customCompletionUrl = settings.customCompletionUrl || defaultSettings.customCompletionUrl;
             settings.toolOutputLimit = settings.toolOutputLimit ?? defaultSettings.toolOutputLimit;
             settings.maxConversations = settings.maxConversations ?? defaultSettings.maxConversations;
+            settings.customApiBaseUrl = settings.customApiBaseUrl || defaultSettings.customApiBaseUrl;
+            settings.customModels = settings.customModels || defaultSettings.customModels;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

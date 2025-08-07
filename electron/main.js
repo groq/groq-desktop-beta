@@ -23,7 +23,7 @@ console.log('Groq Desktop started, logging to', logFile);
 const { BrowserWindow, ipcMain, screen, shell } = require('electron');
 
 // Import shared models
-const { MODEL_CONTEXT_SIZES } = require('../shared/models.js');
+const { MODEL_CONTEXT_SIZES, getModelContextSizes } = require('../shared/models.js');
 
 // Import handlers
 const chatHandler = require('./chatHandler');
@@ -204,8 +204,10 @@ app.whenReady().then(async () => {
     modelContextSizes = { 'default': { context: 8192, vision_supported: false } }; // Fallback
   }// --- Early IPC Handlers required by popup and renderer before other init --- //
   ipcMain.handle('get-model-configs', async () => {
-    // Return a copy to prevent accidental modification
-    return JSON.parse(JSON.stringify(modelContextSizes));
+    // Return a copy to prevent accidental modification with custom models merged in
+    const currentSettings = loadSettings();
+    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {});
+    return JSON.parse(JSON.stringify(mergedModelContextSizes));
   });
 
   ipcMain.handle('get-captured-context', async () => {
@@ -272,7 +274,11 @@ app.whenReady().then(async () => {
   ipcMain.on('chat-stream', async (event, messages, model) => {
     const currentSettings = loadSettings();
     const { discoveredTools } = mcpManager.getMcpState(); // Use module object
-    chatHandler.handleChatStream(event, messages, model, currentSettings, modelContextSizes, discoveredTools);
+    
+    // Merge base models with custom models from settings
+    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {});
+    
+    chatHandler.handleChatStream(event, messages, model, currentSettings, mergedModelContextSizes, discoveredTools);
   });
 
   // Tool execution (use module object)
