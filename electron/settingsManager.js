@@ -21,7 +21,8 @@ function loadSettings() {
             customSystemPrompt: '',
             popupEnabled: true,
             customCompletionUrl: '',
-            toolOutputLimit: 8000
+            toolOutputLimit: 8000,
+            maxConversations: 50
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -36,7 +37,8 @@ function loadSettings() {
         customSystemPrompt: '',
         popupEnabled: true,
         customCompletionUrl: '',
-        toolOutputLimit: 8000
+        toolOutputLimit: 8000,
+        maxConversations: 50
     };
 
     try {
@@ -73,6 +75,7 @@ function loadSettings() {
             }
             settings.customCompletionUrl = settings.customCompletionUrl || defaultSettings.customCompletionUrl;
             settings.toolOutputLimit = settings.toolOutputLimit ?? defaultSettings.toolOutputLimit;
+            settings.maxConversations = settings.maxConversations ?? defaultSettings.maxConversations;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

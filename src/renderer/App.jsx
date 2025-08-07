@@ -117,15 +117,16 @@ function App() {
     if (messages.length > 0 && !loading && selectedModel) {
       const saveTimeout = setTimeout(async () => {
         const result = await saveCurrentConversation({ model: selectedModel });
+        // Note: Removed refreshConversationsList() call to prevent unnecessary list updates
+        // The conversation order should remain stable during auto-saves
         if (result.success) {
-          // Refresh conversations list after successful save
-          refreshConversationsList();
+          console.log('Conversation auto-saved successfully');
         }
       }, 2000); // Auto-save after 2 seconds of inactivity
 
       return () => clearTimeout(saveTimeout);
     }
-  }, [messages, loading, selectedModel, saveCurrentConversation, refreshConversationsList]);
+  }, [messages, loading, selectedModel, saveCurrentConversation]);
 
   // Function to handle new conversation
   const handleNewConversation = () => {

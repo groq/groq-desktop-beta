@@ -28,6 +28,9 @@ function ConversationSidebar({ isOpen, onToggle }) {
   }, [isOpen, refreshConversationsList]);
 
   const handleLoadConversation = async (conversationId) => {
+    // Prevent multiple simultaneous loads
+    if (loading) return;
+    
     setLoading(true);
     try {
       const result = await loadConversation(conversationId);
@@ -165,24 +168,24 @@ function ConversationSidebar({ isOpen, onToggle }) {
             )}
 
             {!loading && conversations.length > 0 && (
-              <div className="space-y-3">
+              <div>
                 {conversations.map((conversation) => (
                   <div
                     key={conversation.id}
                     className={cn(
-                      "group border rounded-lg p-3 hover:bg-muted/50 transition-colors cursor-pointer",
-                      conversation.id === currentConversationId ? 'bg-primary/5 border-primary/20' : ''
+                      "group rounded-lg p-2 px-2 hover:bg-muted/50 transition-colors cursor-pointer",
+                      conversation.id === currentConversationId ? 'bg-primary/5' : ''
                     )}
-                    onClick={() => !editingId && handleLoadConversation(conversation.id)}
+                    onClick={() => !editingId && !loading && conversation.id !== currentConversationId && handleLoadConversation(conversation.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         {editingId === conversation.id ? (
-                          <div className="flex items-center gap-1 mb-2">
+                          <div className="flex items-center gap-1">
                             <Input
                               value={editingTitle}
                               onChange={(e) => setEditingTitle(e.target.value)}
-                              className="h-7 text-sm"
+                              className="h-3 text-sm focus-visible:ring-0 focus:outline-none"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSaveEdit();
                                 if (e.key === 'Escape') handleCancelEdit();
@@ -198,46 +201,32 @@ function ConversationSidebar({ isOpen, onToggle }) {
                             </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-medium hover:text-primary transition-colors flex-1 truncate text-sm">
+                          <div className="flex items-center w-full">
+                            <h3 className="font-medium transition-colors text-sm whitespace-nowrap group-hover:truncate overflow-hidden">
                               {conversation.title}
                             </h3>
-                            {conversation.id === currentConversationId && (
-                              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0">
-                                Current
-                              </span>
-                            )}
                           </div>
                         )}
-                        
-                        <p className="text-xs text-muted-foreground mb-2 truncate leading-relaxed">
-                          {getPreviewText(conversation.lastMessage)}
-                        </p>
-                        
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>{conversation.messageCount} msgs</span>
-                          <span className="capitalize truncate">{conversation.model.split('-')[0]}</span>
-                        </div>
                       </div>
 
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={cn("flex items-center gap-2 hidden group-hover:flex transition-opacity", editingId === conversation.id ? "mt-1" : "")}>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={(e) => { e.stopPropagation(); handleStartEdit(conversation); }}
                           disabled={editingId !== null}
-                          className="h-7 w-7 p-0"
+                          className="h-5 w-5 p-0"
                         >
-                          <Edit3 className="w-3 h-3" />
+                          <Edit3 className="w-3 w-3" />
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conversation.id); }}
                           disabled={editingId !== null}
-                          className="text-destructive hover:text-destructive h-7 w-7 p-0"
+                          className="text-destructive hover:text-destructive h-3 w-3 p-0"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-5 h-5" />
                         </Button>
                       </div>
                     </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, Plus, Trash2, Edit3, Save, X, RefreshCw, Key, Settings as SettingsIcon, Zap, Cpu, Server, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Plus, Trash2, Edit3, Save, X, RefreshCw, Key, Settings as SettingsIcon, Zap, Cpu, Server, AlertCircle, CheckCircle, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,7 +20,8 @@ function Settings() {
     customSystemPrompt: '',
     popupEnabled: true,
     customCompletionUrl: '',
-    toolOutputLimit: 8000
+    toolOutputLimit: 8000,
+    maxConversations: 50
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,7 +64,8 @@ function Settings() {
             customSystemPrompt: '',
             popupEnabled: true,
             customCompletionUrl: '',
-            toolOutputLimit: 8000
+            toolOutputLimit: 8000,
+            maxConversations: 50
         }));
       }
     };
@@ -806,6 +808,46 @@ function Settings() {
                     placeholder="Optional: Enter your custom system prompt..."
                     className="min-h-[100px]"
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Conversation History Management */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  <span>Conversation History</span>
+                </CardTitle>
+                <CardDescription>
+                  Manage how many conversations are stored on disk. Older conversations will be automatically deleted when the limit is exceeded.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="max-conversations">
+                      Maximum Conversations: <Badge variant="outline">{settings.maxConversations}</Badge>
+                    </Label>
+                    <input
+                      type="range"
+                      id="max-conversations"
+                      name="maxConversations"
+                      min="10"
+                      max="500"
+                      step="10"
+                      value={settings.maxConversations || 50}
+                      onChange={handleChange}
+                      className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>10</span>
+                      <span>500</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      When this limit is reached, the oldest conversations will be automatically deleted
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

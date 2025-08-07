@@ -59,7 +59,7 @@ function getConversationPath(conversationId) {
  * @param {Array} messages - Array of messages
  * @returns {string} Generated title
  */
-function generateConversationTitle(messages) {
+async function generateConversationTitle(messages) {
     // Find the first user message
     const firstUserMessage = messages.find(msg => msg.role === 'user');
     if (!firstUserMessage) return 'New Conversation';
@@ -74,13 +74,53 @@ function generateConversationTitle(messages) {
         text = textParts.map(part => part.text).join(' ');
     }
     
-    // Truncate and clean up
-    text = text.trim();
-    if (text.length > 50) {
-        text = text.substring(0, 47) + '...';
-    }
+    // If text is empty, return default
+    if (!text.trim()) return 'New Conversation';
     
-    return text || 'New Conversation';
+    try {
+        // Initialize Groq client
+        const Groq = require('groq-sdk');
+        const { loadSettings } = require('./settingsManager');
+        const settings = loadSettings();
+        
+        if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
+            // Fall back to simple truncation if no API key
+            text = text.trim();
+            return text;
+        }
+        
+        const groq = new Groq({ apiKey: settings.GROQ_API_KEY });
+        
+        // Make API call to generate title
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a helpful assistant that generates short, descriptive titles for conversations. Keep titles under 50 characters and focus on the main topic or question."
+                },
+                {
+                    role: "user",
+                    content: `Generate a short, descriptive title for this conversation that starts with: "${text}", your output should be a single line of text with no quotes.`
+                }
+            ],
+            model: "llama-3.1-8b-instant",
+            temperature: 0.3,
+            max_tokens: 50,
+            stream: false
+        });
+        
+        const title = completion.choices[0]?.message?.content?.trim() || text;
+        
+        return title;
+    } catch (error) {
+        console.warn('Error generating title with Groq:', error);
+        // Fall back to simple truncation
+        text = text.trim();
+        if (text.length > 50) {
+            text = text.substring(0, 47) + '...';
+        }
+        return text;
+    }
 }
 
 /**
@@ -162,9 +202,10 @@ async function saveConversation(conversationId, messages, options = {}) {
         
         // Prepare metadata
         const now = new Date().toISOString();
+        const title = options.title || await generateConversationTitle(cleanedMessages);
         const metadata = {
             id: conversationId,
-            title: options.title || generateConversationTitle(cleanedMessages),
+            title,
             model: options.model || 'unknown',
             createdAt: options.createdAt || now,
             updatedAt: now,
@@ -179,8 +220,20 @@ async function saveConversation(conversationId, messages, options = {}) {
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
         fs.writeFileSync(messagesPath, JSON.stringify(cleanedMessages, null, 2));
         
-        // Update recent conversations
-        await updateRecentConversations(conversationId);
+        // Perform cleanup to maintain conversation limit
+        // Load settings to get the max conversations limit
+        try {
+            const { loadSettings } = require('./settingsManager');
+            const settings = loadSettings();
+            const maxConversations = settings.maxConversations || 50;
+            
+            // Run cleanup asynchronously to not block the save operation
+            setImmediate(async () => {
+                await cleanupOldConversations(maxConversations);
+            });
+        } catch (error) {
+            console.warn('Could not perform conversation cleanup:', error);
+        }
         
         return { success: true, conversationId, metadata };
         
@@ -213,8 +266,8 @@ async function loadConversation(conversationId) {
         const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
         const messages = JSON.parse(fs.readFileSync(messagesPath, 'utf8'));
         
-        // Update recent conversations (move to top)
-        await updateRecentConversations(conversationId);
+        // Note: Removed updateRecentConversations call to preserve conversation order
+        // Conversations will only be reordered when they are saved/updated, not when loaded
         
         return {
             success: true,
@@ -237,32 +290,42 @@ async function loadConversation(conversationId) {
  */
 async function listRecentConversations(limit = 50) {
     try {
-        const recentConversationsPath = getRecentConversationsPath();
+        const conversationsDir = getConversationsDirectory();
         
-        if (!fs.existsSync(recentConversationsPath)) {
+        if (!fs.existsSync(conversationsDir)) {
             return { success: true, conversations: [] };
         }
         
-        const recentIds = JSON.parse(fs.readFileSync(recentConversationsPath, 'utf8'));
+        // Get all conversation directories
+        const entries = fs.readdirSync(conversationsDir);
+        const conversationDirs = entries.filter(entry => {
+            const fullPath = path.join(conversationsDir, entry);
+            return fs.statSync(fullPath).isDirectory() && entry.startsWith('conversation-');
+        });
+        
         const conversations = [];
         
-        for (const conversationId of recentIds.slice(0, limit)) {
+        for (const dir of conversationDirs) {
             try {
-                const conversationDir = getConversationPath(conversationId);
+                const conversationDir = path.join(conversationsDir, dir);
                 const metadataPath = path.join(conversationDir, 'metadata.json');
                 
                 if (fs.existsSync(metadataPath)) {
                     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
                     conversations.push(metadata);
                 } else {
-                    console.warn(`Metadata missing for conversation ${conversationId}`);
+                    console.warn(`Metadata missing for conversation directory ${dir}`);
                 }
             } catch (error) {
-                console.warn(`Error loading metadata for conversation ${conversationId}:`, error);
+                console.warn(`Error loading metadata for conversation directory ${dir}:`, error);
             }
         }
         
-        return { success: true, conversations };
+        // Sort by updatedAt in descending order (most recently updated first)
+        // This maintains a stable order that only changes when conversations are actually updated
+        conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        
+        return { success: true, conversations: conversations.slice(0, limit) };
         
     } catch (error) {
         console.error('Error listing conversations:', error);
@@ -348,6 +411,82 @@ async function removeFromRecentConversations(conversationId) {
 }
 
 /**
+ * Cleans up old conversations to maintain the maximum limit
+ * @param {number} maxConversations - Maximum number of conversations to keep
+ * @returns {Object} Result object with success, deletedCount, and any error
+ */
+async function cleanupOldConversations(maxConversations = 50) {
+    try {
+        const conversationsDir = getConversationsDirectory();
+        
+        if (!fs.existsSync(conversationsDir)) {
+            return { success: true, deletedCount: 0 };
+        }
+        
+        // Get all conversation directories
+        const entries = fs.readdirSync(conversationsDir);
+        const conversationDirs = entries.filter(entry => {
+            const fullPath = path.join(conversationsDir, entry);
+            return fs.statSync(fullPath).isDirectory() && entry.startsWith('conversation-');
+        });
+        
+        // If we're under the limit, no cleanup needed
+        if (conversationDirs.length <= maxConversations) {
+            return { success: true, deletedCount: 0 };
+        }
+        
+        const conversations = [];
+        
+        // Load metadata for all conversations to sort by updatedAt
+        for (const dir of conversationDirs) {
+            try {
+                const conversationDir = path.join(conversationsDir, dir);
+                const metadataPath = path.join(conversationDir, 'metadata.json');
+                
+                if (fs.existsSync(metadataPath)) {
+                    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                    conversations.push({
+                        id: metadata.id,
+                        directory: conversationDir,
+                        updatedAt: metadata.updatedAt
+                    });
+                }
+            } catch (error) {
+                console.warn(`Error loading metadata for cleanup in directory ${dir}:`, error);
+            }
+        }
+        
+        // Sort by updatedAt (oldest first)
+        conversations.sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt));
+        
+        // Calculate how many to delete
+        const toDeleteCount = conversations.length - maxConversations;
+        const conversationsToDelete = conversations.slice(0, toDeleteCount);
+        
+        let deletedCount = 0;
+        
+        // Delete the oldest conversations
+        for (const conversation of conversationsToDelete) {
+            try {
+                fs.rmSync(conversation.directory, { recursive: true, force: true });
+                await removeFromRecentConversations(conversation.id);
+                deletedCount++;
+                console.log(`Cleaned up old conversation ${conversation.id}`);
+            } catch (error) {
+                console.error(`Error deleting conversation ${conversation.id}:`, error);
+            }
+        }
+        
+        console.log(`Conversation cleanup completed: deleted ${deletedCount} old conversations, keeping ${maxConversations} most recent`);
+        return { success: true, deletedCount };
+        
+    } catch (error) {
+        console.error('Error during conversation cleanup:', error);
+        return { success: false, error: error.message, deletedCount: 0 };
+    }
+}
+
+/**
  * Updates conversation metadata (title, etc.)
  * @param {string} conversationId - The conversation ID
  * @param {Object} updates - Fields to update
@@ -418,5 +557,6 @@ module.exports = {
     loadConversation,
     listRecentConversations,
     deleteConversation,
-    updateConversationMetadata
+    updateConversationMetadata,
+    cleanupOldConversations
 };
