@@ -174,8 +174,8 @@ const components = {
           },
         }
 function MarkdownRenderer({ content }) {
-  content=content.replace(/\\\[/g, "$$$$\n")
-    .replace(/\\\]/g, "\n$$$$")
+  content=content.replace(/\\\[/g, "$$$$")
+    .replace(/\\\]/g, "$$$$")
     .replace(/\\\(/g, "$$")
     .replace(/\\\)/g, "$$")
     .replace(/```latex([\s\S]*?)```/g, "$$$$$1$$$$");
