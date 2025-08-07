@@ -21,7 +21,7 @@ function Settings() {
     popupEnabled: true,
     customCompletionUrl: '',
     toolOutputLimit: 8000,
-    maxConversations: 50
+    maxConversations: 50,
     customApiBaseUrl: '',
     customModels: {},
     builtInTools: {
@@ -85,7 +85,7 @@ function Settings() {
             popupEnabled: true,
             customCompletionUrl: '',
             toolOutputLimit: 8000,
-            maxConversations: 50
+            maxConversations: 50,
             customApiBaseUrl: '',
             customModels: {},
             builtInTools: {

@@ -22,7 +22,7 @@ function loadSettings() {
             popupEnabled: true,
             customCompletionUrl: '',
             toolOutputLimit: 8000,
-            maxConversations: 50
+            maxConversations: 50,
             customApiBaseUrl: '',
             customModels: {}
         };
@@ -40,7 +40,7 @@ function loadSettings() {
         popupEnabled: true,
         customCompletionUrl: '',
         toolOutputLimit: 8000,
-        maxConversations: 50
+        maxConversations: 50,
         customApiBaseUrl: '',
         customModels: {}
     };
