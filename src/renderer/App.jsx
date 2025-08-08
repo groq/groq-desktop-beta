@@ -74,7 +74,6 @@ function App() {
     setMessages, 
     saveCurrentConversation,
     startNewConversation,
-    refreshConversationsList,
     currentConversationId
   } = useChat(); // Use context state
   const [loading, setLoading] = useState(false);
@@ -116,17 +115,23 @@ function App() {
     // Only auto-save if we have messages and are not currently loading
     if (messages.length > 0 && !loading && selectedModel) {
       const saveTimeout = setTimeout(async () => {
+        const wasNewConversation = currentConversationId === null;
         const result = await saveCurrentConversation({ model: selectedModel });
-        // Note: Removed refreshConversationsList() call to prevent unnecessary list updates
-        // The conversation order should remain stable during auto-saves
+        
         if (result.success) {
           console.log('Conversation auto-saved successfully');
+          // The ChatContext.saveCurrentConversation already handles sidebar refresh for new conversations
+          if (result.wasNewConversation) {
+            console.log('New conversation created and sidebar updated');
+          }
+        } else {
+          console.warn('Auto-save failed:', result.error);
         }
       }, 2000); // Auto-save after 2 seconds of inactivity
 
       return () => clearTimeout(saveTimeout);
     }
-  }, [messages, loading, selectedModel, saveCurrentConversation]);
+  }, [messages, loading, selectedModel, saveCurrentConversation, currentConversationId]);
 
   // Function to handle new conversation
   const handleNewConversation = () => {
@@ -948,19 +953,6 @@ function App() {
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* New Chat Button - only show when there are messages */}
-              {messages.length > 0 && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleNewConversation}
-                  className="text-foreground hover:text-foreground"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  New Chat
-                </Button>
-              )}
-              
               <Link to="/settings">
                 <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
                   <Settings className="h-5 w-5" />

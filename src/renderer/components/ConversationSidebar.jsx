@@ -13,7 +13,9 @@ function ConversationSidebar({ isOpen, onToggle }) {
     deleteConversation,
     updateConversationTitle,
     currentConversationId,
-    startNewConversation
+    startNewConversation,
+    isRefreshingConversations,
+    lastError
   } = useChat();
   
   const [editingId, setEditingId] = useState(null);
@@ -23,7 +25,7 @@ function ConversationSidebar({ isOpen, onToggle }) {
   // Load conversations when sidebar opens
   useEffect(() => {
     if (isOpen) {
-      refreshConversationsList();
+      refreshConversationsList(50, true); // Use immediate refresh when opening sidebar
     }
   }, [isOpen, refreshConversationsList]);
 
@@ -153,13 +155,33 @@ function ConversationSidebar({ isOpen, onToggle }) {
           isOpen ? "opacity-100" : "opacity-0"
         )}>
           <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent p-4">
-            {loading && (
+            {(loading || isRefreshingConversations) && (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                <span className="ml-2 text-sm text-muted-foreground">
+                  {isRefreshingConversations ? 'Loading conversations...' : 'Loading...'}
+                </span>
               </div>
             )}
 
-            {!loading && conversations.length === 0 && (
+            {lastError && (
+              <div className="flex items-center justify-center py-8 px-4">
+                <div className="text-center text-destructive">
+                  <p className="text-sm font-medium mb-2">Unable to load conversations</p>
+                  <p className="text-xs text-muted-foreground mb-3">{lastError}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => refreshConversationsList(50, true)}
+                    disabled={isRefreshingConversations}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!loading && !isRefreshingConversations && !lastError && conversations.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <MessageSquare className="w-8 h-8 mx-auto mb-4 opacity-50" />
                 <p className="text-sm font-medium mb-2">No conversations yet</p>
@@ -167,7 +189,7 @@ function ConversationSidebar({ isOpen, onToggle }) {
               </div>
             )}
 
-            {!loading && conversations.length > 0 && (
+            {!loading && !isRefreshingConversations && !lastError && conversations.length > 0 && (
               <div>
                 {conversations.map((conversation) => (
                   <div
@@ -202,7 +224,7 @@ function ConversationSidebar({ isOpen, onToggle }) {
                           </div>
                         ) : (
                           <div className="flex items-center w-full">
-                            <h3 className="font-medium transition-colors text-sm whitespace-nowrap group-hover:truncate overflow-hidden">
+                            <h3 className="font-medium transition-colors text-sm whitespace-nowrap truncate overflow-hidden">
                               {conversation.title}
                             </h3>
                           </div>

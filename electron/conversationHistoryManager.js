@@ -202,7 +202,29 @@ async function saveConversation(conversationId, messages, options = {}) {
         
         // Prepare metadata
         const now = new Date().toISOString();
-        const title = options.title || await generateConversationTitle(cleanedMessages);
+        let title;
+        
+        if (options.title) {
+            // Use explicitly provided title
+            title = options.title;
+        } else if (conversationId) {
+            // For existing conversations, try to preserve existing title
+            try {
+                const existingMetadataPath = path.join(conversationDir, 'metadata.json');
+                if (fs.existsSync(existingMetadataPath)) {
+                    const existingMetadata = JSON.parse(fs.readFileSync(existingMetadataPath, 'utf8'));
+                    title = existingMetadata.title || await generateConversationTitle(cleanedMessages);
+                } else {
+                    title = await generateConversationTitle(cleanedMessages);
+                }
+            } catch (error) {
+                console.warn('Could not read existing metadata, generating new title:', error);
+                title = await generateConversationTitle(cleanedMessages);
+            }
+        } else {
+            // New conversation, generate title
+            title = await generateConversationTitle(cleanedMessages);
+        }
         const metadata = {
             id: conversationId,
             title,
@@ -219,6 +241,9 @@ async function saveConversation(conversationId, messages, options = {}) {
         
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
         fs.writeFileSync(messagesPath, JSON.stringify(cleanedMessages, null, 2));
+        
+        // Update recent conversations list to track access order
+        await updateRecentConversations(conversationId);
         
         // Perform cleanup to maintain conversation limit
         // Load settings to get the max conversations limit
@@ -304,6 +329,7 @@ async function listRecentConversations(limit = 50) {
         });
         
         const conversations = [];
+        const seenIds = new Set(); // Track conversation IDs to prevent duplicates
         
         for (const dir of conversationDirs) {
             try {
@@ -312,6 +338,14 @@ async function listRecentConversations(limit = 50) {
                 
                 if (fs.existsSync(metadataPath)) {
                     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                    
+                    // Skip if we've already seen this conversation ID (prevents duplicates)
+                    if (seenIds.has(metadata.id)) {
+                        console.warn(`Duplicate conversation ID ${metadata.id} found, skipping`);
+                        continue;
+                    }
+                    
+                    seenIds.add(metadata.id);
                     conversations.push(metadata);
                 } else {
                     console.warn(`Metadata missing for conversation directory ${dir}`);
@@ -322,8 +356,20 @@ async function listRecentConversations(limit = 50) {
         }
         
         // Sort by updatedAt in descending order (most recently updated first)
-        // This maintains a stable order that only changes when conversations are actually updated
-        conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        // Use a stable sort that handles identical timestamps by falling back to conversation ID
+        conversations.sort((a, b) => {
+            const timeA = new Date(a.updatedAt).getTime();
+            const timeB = new Date(b.updatedAt).getTime();
+            
+            if (timeA !== timeB) {
+                return timeB - timeA; // Most recent first
+            }
+            
+            // If timestamps are identical, sort by ID (numeric descending) for stability
+            const idA = parseInt(a.id, 10) || 0;
+            const idB = parseInt(b.id, 10) || 0;
+            return idB - idA;
+        });
         
         return { success: true, conversations: conversations.slice(0, limit) };
         
