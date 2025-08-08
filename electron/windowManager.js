@@ -8,6 +8,7 @@ function createWindow(screen, BrowserWindow) {
   mainWindow = new BrowserWindow({
     width: Math.min(1400, width),
     height: height,
+    minWidth: Math.floor(screen.getPrimaryDisplay().workAreaSize.width * 0.35), // Set minimum width to 35% of screen width
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

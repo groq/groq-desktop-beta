@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { cn } from '../lib/utils';
 import MessageList from '../components/MessageList';
+import { useChat } from '../context/ChatContext';
 
 const ContextPill = ({ title, onRemove }) => (
   <Badge variant="outline" className="inline-flex items-center gap-2 bg-background/50 backdrop-blur-sm border-border/50 text-foreground shadow-sm">
@@ -94,8 +95,14 @@ const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact =
 };
 
 const PopupPage = () => {
+  const { 
+    messages, 
+    setMessages, 
+    saveCurrentConversation,
+    startNewConversation 
+  } = useChat();
+  
   const [context, setContext] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
@@ -107,6 +114,7 @@ const PopupPage = () => {
   const [fullScreenImage, setFullScreenImage] = useState(null);
   const [visionSupported, setVisionSupported] = useState(false);
   const [suggestion, setSuggestion] = useState('');
+  const [autocompleteEnabled, setAutocompleteEnabled] = useState(true);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -150,8 +158,19 @@ const PopupPage = () => {
     }
   }, [inputValue]);
 
+  // Auto-save conversation when messages change
+  useEffect(() => {
+    // Only auto-save if we have messages and are not currently loading
+    if (messages.length > 0 && !loading && selectedModel) {
+      const saveTimeout = setTimeout(() => {
+        saveCurrentConversation({ model: selectedModel });
+      }, 2000); // Auto-save after 2 seconds of inactivity
+
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [messages, loading, selectedModel, saveCurrentConversation]);
+
   // Dynamic popup resizing
-  
   useEffect(() => {
     const popupElement = popupRef.current;
     if (!popupElement) return;
@@ -342,10 +361,10 @@ const PopupPage = () => {
       setShowContext(false);
     }
 
-    // Create message for UI
+    // Create message for UI (should match the model format for consistency)
     const userMessageForUi = {
       role: 'user',
-      content: uiMessageContent,
+      content: modelMessageContent, // Use model format for consistency with storage
     };
 
     setMessages(prev => [...prev, userMessageForUi]);
@@ -577,7 +596,7 @@ const PopupPage = () => {
             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" 
               style={{ WebkitAppRegion: 'no-drag' }}
               onClick={() => {
-              setMessages([]);
+              startNewConversation();
               setIsExpanded(false);
             }}>
               <NotebookPen size={14} />
@@ -617,7 +636,16 @@ const PopupPage = () => {
                 className="h-4 w-auto"
               />
             </div>
-            {/* Compact Model Selector - Always visible when not expanded */}
+          </div>
+
+          {/* Context Pill */}
+          {context && showContext && (
+            <div className="flex mb-2 justify-between" style={{ WebkitAppRegion: 'no-drag' }}>
+              <ContextPill 
+                title={context.title || 'Captured Context'} 
+                onRemove={() => setShowContext(false)}
+              />
+              {/* Compact Model Selector - Always visible when not expanded */}
             {!isExpanded && (
               <div style={{ WebkitAppRegion: 'no-drag' }}>
                 <CustomModelSelector 
@@ -629,15 +657,6 @@ const PopupPage = () => {
                 />
               </div>
             )}
-          </div>
-
-          {/* Context Pill */}
-          {context && showContext && (
-            <div className="flex mb-2" style={{ WebkitAppRegion: 'no-drag' }}>
-              <ContextPill 
-                title={context.title || 'Captured Context'} 
-                onRemove={() => setShowContext(false)}
-              />
             </div>
           )}
           
@@ -745,8 +764,6 @@ const PopupPage = () => {
                 )}
               </Button>
             </div>
-            
-    
           </div>
         </div>
       </div>
