@@ -353,84 +353,55 @@ function Settings() {
     return args;
   };
 
-  // Switches view to Form, converting JSON state if valid
-  const switchToFormView = () => {
-    if (!useJsonInput) return; // Already in form view
-
-    try {
-      const parsedJson = JSON.parse(jsonInput || '{}');
-      if (typeof parsedJson !== 'object' || parsedJson === null) {
-        throw new Error("JSON must be an object.");
-      }
-      
-      // Basic validation (can be more robust)
-      const command = parsedJson.command || '';
-      const args = Array.isArray(parsedJson.args) ? parsedJson.args : [];
-      const env = typeof parsedJson.env === 'object' && parsedJson.env !== null ? parsedJson.env : {};
-      const argsString = args.join(' ');
-
-      setNewMcpServer(prev => ({ ...prev, command, args: argsString, env }));
-      setJsonError(null);
-      setUseJsonInput(false);
-    } catch (error) {
-      console.error("Error parsing JSON to switch to form view:", error);
-      setJsonError(`Invalid JSON: ${error.message}. Cannot switch to form view.`);
-      // Optionally keep the user in JSON view if parsing fails
-    }
-  };
-
-  // Switches view to JSON, converting form state
-  const switchToJsonView = () => {
-    if (useJsonInput) return; // Already in JSON view
-
-    try {
-      let serverConfig = {};
-      if (newMcpServer.transport === 'stdio') {
-          const argsArray = parseArgsString(newMcpServer.args);
-          serverConfig = {
-              transport: 'stdio',
-              command: newMcpServer.command,
-              args: argsArray,
-              env: newMcpServer.env
-          };
-      } else { // sse or streamableHttp
-          serverConfig = {
-              transport: newMcpServer.transport, // Keep the selected transport
-              url: newMcpServer.url
-          };
-          // Explicitly exclude stdio fields if they somehow exist
-          delete serverConfig.command;
-          delete serverConfig.args;
-          delete serverConfig.env;
-      }
-
-      const jsonString = JSON.stringify(serverConfig, null, 2);
-      setJsonInput(jsonString);
-      setJsonError(null); // Clear any previous JSON error
-      setUseJsonInput(true);
-    } catch (error) {
-      console.error("Error converting form state to JSON:", error);
-      // This should ideally not happen if form state is valid
-      setJsonError(`Internal error: Failed to generate JSON. ${error.message}`);
-    }
-  };
-
   const handleSaveMcpServer = (e) => {
     e.preventDefault();
     
     let serverConfig;
+    let serverId;
     
     if (useJsonInput) {
-      const parsedConfig = parseJsonInput();
-      if (!parsedConfig) return;
-      
-      // Use the ID from the form field (which is disabled during edit)
-      if (!newMcpServer.id.trim()) {
-        setJsonError("Server ID is required");
+      // Parse the JSON input
+      try {
+        const parsed = JSON.parse(jsonInput);
+        
+        // Handle both formats: direct server config or wrapped in mcpServers
+        let serversObj;
+        if (parsed.mcpServers) {
+          serversObj = parsed.mcpServers;
+        } else {
+          serversObj = parsed;
+        }
+        
+        const serverIds = Object.keys(serversObj);
+        if (serverIds.length === 0) {
+          setJsonError("JSON must contain at least one server configuration");
+          return;
+        }
+        if (serverIds.length > 1) {
+          setJsonError("Please add only one server at a time");
+          return;
+        }
+        
+        serverId = serverIds[0];
+        serverConfig = serversObj[serverId];
+        
+        if (!serverConfig.transport) {
+          serverConfig.transport = 'stdio';
+        }
+        
+        if (serverConfig.transport === 'stdio' && !serverConfig.command) {
+          setJsonError("Stdio transport requires 'command' field");
+          return;
+        }
+        
+        if ((serverConfig.transport === 'sse' || serverConfig.transport === 'streamableHttp') && !serverConfig.url) {
+          setJsonError("SSE/StreamableHTTP transport requires 'url' field");
+          return;
+        }
+      } catch (error) {
+        setJsonError(`Invalid JSON: ${error.message}`);
         return;
       }
-      
-      serverConfig = parsedConfig;
     } else {
       // Use form state
       if (!newMcpServer.id) {
@@ -470,14 +441,14 @@ function Settings() {
       }
     }
 
-    console.log('Saving MCP server:', newMcpServer.id, 'with config:', serverConfig);
+    console.log('Saving MCP server:', serverId, 'with config:', serverConfig);
     
     // Update settings with new/updated MCP server
     const updatedSettings = {
       ...settings,
       mcpServers: {
         ...settings.mcpServers,
-        [newMcpServer.id]: serverConfig // Use ID from state (disabled during edit)
+        [serverId]: serverConfig
       }
     };
 
@@ -1109,11 +1080,23 @@ function Settings() {
 
                 {/* Add New Server Section */}
                 <div className="border-t pt-6 space-y-4">
-                  <h4 className="font-medium text-sm flex items-center space-x-2">
-                    <Plus className="h-4 w-4" />
-                    <span>Add New MCP Server</span>
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-sm flex items-center space-x-2">
+                      <Plus className="h-4 w-4" />
+                      <span>Add New MCP Server</span>
+                    </h4>
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="json-mode" className="text-sm">JSON Mode</Label>
+                      <Switch
+                        id="json-mode"
+                        checked={useJsonInput}
+                        onChange={() => setUseJsonInput(!useJsonInput)}
+                      />
+                    </div>
+                  </div>
                   
+                  {!useJsonInput ? (
+                  <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="server-id">Server ID</Label>
@@ -1235,6 +1218,7 @@ function Settings() {
                               size="sm"
                               onClick={addEnvVar}
                               disabled={!newEnvVar.key}
+                              className="bg-orange-500 hover:bg-orange-600 text-white"
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
@@ -1243,13 +1227,47 @@ function Settings() {
                       </div>
                     </div>
                   )}
+                  </>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="json-config">Paste your complete MCP server configuration JSON:</Label>
+                      <Textarea
+                        id="json-config"
+                        value={jsonInput}
+                        onChange={handleJsonInputChange}
+                        placeholder={`Example configuration:
+
+{
+  "my-server-id": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote@latest",
+      "https://your-url/mcp",
+      "--header",
+      "Authorization: Bearer YOUR_API_KEY"
+    ],
+    "env": {
+      "API_KEY": "your-key-here"
+    }
+  }
+}`}
+                        rows={20}
+                        className="font-mono text-sm"
+                      />
+                      {jsonError && (
+                        <p className="text-sm text-red-500">{jsonError}</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex justify-end space-x-2">
                     <Button
                       variant="outline"
                       onClick={() => {
                         setNewMcpServer({
-                          id: '', transport: 'stdio', command: '', args: '', env: {}
+                          id: '', transport: 'stdio', command: '', args: '', env: {}, url: ''
                         });
                         setJsonInput('');
                         setJsonError(null);
@@ -1260,10 +1278,10 @@ function Settings() {
                     </Button>
                     <Button
                       onClick={handleSaveMcpServer}
-                      disabled={!newMcpServer.id || (newMcpServer.transport === 'stdio' && !newMcpServer.command)}
+                      disabled={useJsonInput ? !jsonInput.trim() : (!newMcpServer.id || (newMcpServer.transport === 'stdio' && !newMcpServer.command))}
                     >
                       <Save className="h-4 w-4 mr-2" />
-                      Add Server
+                      {editingServerId ? 'Save Changes' : 'Add Server'}
                     </Button>
                   </div>
                 </div>
