@@ -179,8 +179,8 @@ function MarkdownRenderer({ content, disableMath = false }) {
   
   // Only process LaTeX if math rendering is enabled
   if (!disableMath) {
-    content = content.replace(/\\\[/g, "$$$$\n")
-      .replace(/\\\]/g, "\n$$$$")
+    content = content.replace(/\\\[/g, "$$$$")
+      .replace(/\\\]/g, "$$$$")
       .replace(/\\\(/g, "$$")
       .replace(/\\\)/g, "$$")
       .replace(/```latex([\s\S]*?)```/g, "$$$$$1$$$$");
@@ -189,7 +189,7 @@ function MarkdownRenderer({ content, disableMath = false }) {
   // Conditionally include math plugins based on disableMath prop
   const remarkPlugins = disableMath ? [remarkGfm] : [remarkGfm, remarkMath];
   const rehypePlugins = disableMath ? [] : [rehypeKatex];
-
+  
   return (
     <div className="font-inter">
       <ReactMarkdown

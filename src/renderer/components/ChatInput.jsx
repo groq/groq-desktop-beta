@@ -295,7 +295,7 @@ function ChatInput({
 	return (
     <div 
 			className={cn(
-				"flex flex-col gap-4 border rounded-2xl shadow-lg w-full p-4 bg-card/50 backdrop-blur-sm transition-all duration-200",
+				"flex flex-col gap-4 border rounded-2xl shadow-lg w-full min-w-0 p-4 bg-card/50 backdrop-blur-sm transition-all duration-200",
 				isDragOver 
 					? "border-primary border-2 bg-primary/5 shadow-xl" 
 					: "border-border/50"
@@ -415,8 +415,8 @@ function ChatInput({
 				</div>
 
 				{/* Bottom Controls */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center justify-between gap-4 px-2">
+					<div className="flex flex-wrap items-center gap-2">
 						{/* File Upload Button */}
 						{files.length < 5 && (
 							<Button
@@ -424,7 +424,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={() => fileInputRef.current?.click()}
-								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
+								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl shrink-0"
 								title={visionSupported ? "Upload file or image (max 5)" : "Upload files (images require vision-capable model)"}
 								disabled={loading}
 							>
@@ -449,7 +449,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={onOpenMcpTools}
-								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
+								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl shrink-0"
 								title="Open MCP tools panel"
 								disabled={loading}
 							>
@@ -459,10 +459,10 @@ function ChatInput({
 						)}
 					</div>
 
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3 ml-auto">
 						{/* Autocomplete hint */}
 						{autocompleteEnabled && suggestion && !loading && (
-							<div className="text-xs text-muted-foreground flex items-center gap-1">
+							<div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
 								<kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Tab</kbd>
 								to accept
 							</div>
@@ -470,7 +470,7 @@ function ChatInput({
 						
 						{/* Model Selector */}
 						<Select value={selectedModel} onValueChange={onModelChange}>
-							<SelectTrigger className="w-48 h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
+							<SelectTrigger className="w-full min-w-[12rem] max-w-[16rem] h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
 								<SelectValue placeholder="Select model" className="text-foreground">
 									{selectedModel ? getModelDisplayName(selectedModel) : "Select model"}
 								</SelectValue>

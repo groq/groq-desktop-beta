@@ -61,6 +61,13 @@ contextBridge.exposeInMainWorld('electron', {
   getMcpTools: () => ipcRenderer.invoke('get-mcp-tools'),
   // Function to get model configurations
   getModelConfigs: () => ipcRenderer.invoke('get-model-configs'),
+
+  // Conversation History functions
+  saveConversation: (conversationId, messages, options) => ipcRenderer.invoke('conversation-save', conversationId, messages, options),
+  loadConversation: (conversationId) => ipcRenderer.invoke('conversation-load', conversationId),
+  listConversations: (limit) => ipcRenderer.invoke('conversation-list', limit),
+  deleteConversation: (conversationId) => ipcRenderer.invoke('conversation-delete', conversationId),
+  updateConversationMetadata: (conversationId, updates) => ipcRenderer.invoke('conversation-update-metadata', conversationId, updates),
   
   // Add event listener for MCP server status changes
   onMcpServerStatusChanged: (callback) => {
