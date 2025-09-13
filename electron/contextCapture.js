@@ -16,7 +16,7 @@ class ContextCapture {
     }
 
     this.onContextCaptured = callback;
-    const accelerator = process.platform === 'darwin' ? 'Control+G' : 'Option+G';
+    const accelerator = process.platform === 'darwin' ? 'Control+G' : 'Control+G';
 
     const success = globalShortcut.register(accelerator, () => {
       console.log(`Global hotkey ${accelerator} pressed`);
