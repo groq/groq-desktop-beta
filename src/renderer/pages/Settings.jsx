@@ -849,11 +849,13 @@ function Settings() {
                     name="customApiBaseUrl"
                     value={settings.customApiBaseUrl || ''}
                     onChange={handleChange}
-                    placeholder="e.g., https://api.openai.com/v1 or http://127.0.0.1:8000/api"
+                    placeholder="e.g., https://api.groq.com/openai/v1/ or http://127.0.0.1:8000/v1/"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Override the default API endpoint. You can include '/openai/v1' in the URL or just the base path. 
-                    The system will automatically handle the correct endpoint construction. Leave empty to use the default Groq API.
+                    <strong>Important:</strong> URL must end with <code className="text-xs bg-muted px-1 py-0.5 rounded">/v1/</code> (with trailing slash).
+                    For Groq-compatible endpoints: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.groq.com/openai/v1/</code>.
+                    For custom OpenAI-compatible endpoints: <code className="text-xs bg-muted px-1 py-0.5 rounded">http://your-server/v1/</code>.
+                    Leave empty to use the default Groq API.
                   </p>
                 </div>
               </CardContent>

@@ -151,11 +151,13 @@ function processStreamChunk(chunk, event, accumulatedData) {
         event.sender.send('chat-stream-content', { content: delta.content });
     }
 
-    // Compound-beta reasoning streaming
-    if (delta?.reasoning) {
-        accumulatedData.reasoning += delta.reasoning;
+    // Reasoning streaming - supports both delta.reasoning and delta.reasoning_content
+    // (different models use different field names)
+    const reasoningDelta = delta?.reasoning || delta?.reasoning_content;
+    if (reasoningDelta) {
+        accumulatedData.reasoning += reasoningDelta;
         event.sender.send('chat-stream-reasoning', {
-            reasoning: delta.reasoning,
+            reasoning: reasoningDelta,
             accumulated: accumulatedData.reasoning
         });
     }
@@ -348,23 +350,38 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
 
         const groqConfig = { apiKey: settings.GROQ_API_KEY };
         
-        // Use custom API base URL if provided
+        // Use custom API base URL if provided (use exactly as provided)
         if (settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
-            let customBaseUrl = settings.customApiBaseUrl.trim();
-            
-            // Remove trailing slash if present
-            customBaseUrl = customBaseUrl.replace(/\/$/, '');
-            
-            // If the URL ends with /openai/v1, remove it since the Groq SDK will append it
-            if (customBaseUrl.endsWith('/openai/v1')) {
-                customBaseUrl = customBaseUrl.replace(/\/openai\/v1$/, '');
-            }
-            
-            groqConfig.baseURL = customBaseUrl;
-            console.log(`Using custom base URL: ${customBaseUrl} (Groq SDK will append /openai/v1/chat/completions)`);
+            groqConfig.baseURL = settings.customApiBaseUrl.trim();
+            console.log(`Using custom base URL: ${groqConfig.baseURL}`);
         }
         
         const groq = new Groq(groqConfig);
+        
+        // Monkey patch the SDK when using custom baseURL
+        // Custom baseURL should end with /v1/ (e.g., http://example.com/v1/ or https://api.groq.com/openai/v1/)
+        if (settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
+            const originalPost = groq.post.bind(groq);
+            const originalBuildURL = groq.buildURL.bind(groq);
+            
+            // Intercept buildURL to strip /openai/v1/ prefix since custom baseURL includes the full path
+            groq.buildURL = function(path, query, defaultBaseURL) {
+                const originalPath = path;
+                // Strip the /openai/v1/ prefix - custom baseURL should include the full path up to /v1/
+                if (path.startsWith('/openai/v1/')) {
+                    path = path.replace(/^\/openai\/v1/, '');
+                    console.log(`[URL Rewrite] Original path: ${originalPath} -> New path: ${path}`);
+                }
+                const finalURL = originalBuildURL(path, query, defaultBaseURL);
+                console.log(`[Final URL] ${finalURL}`);
+                return finalURL;
+            };
+            
+            groq.post = function(path, ...args) {
+                return originalPost(path, ...args);
+            };
+        }
+        
         const tools = prepareTools(discoveredTools);
         const cleanedMessages = cleanMessages(messages);
         const prunedMessages = pruneMessageHistory(cleanedMessages, modelToUse, modelContextSizes);
