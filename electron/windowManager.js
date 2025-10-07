@@ -15,6 +15,9 @@ function createWindow(screen, BrowserWindow) {
     }
   });
 
+  // Maximize window by default
+  mainWindow.maximize();
+
   // Determine URL based on environment
   const startUrl = process.env.NODE_ENV === 'development'
     ? 'http://localhost:5173'
