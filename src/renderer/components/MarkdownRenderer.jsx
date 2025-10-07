@@ -84,7 +84,7 @@ const components = {
           td: ({ node: _, children, ...props }) => {
             return (
               <td
-                className="border-r border-gray-200 p-2 font-semibold first:border-l text-left"
+                className="border-r border-gray-200 p-2 font-normal first:border-l text-left"
                 {...props}
               >
                 {children}
@@ -94,7 +94,7 @@ const components = {
           th: ({ node: _, children, ...props }) => {
             return (
               <th
-                className="border-r border-gray-200 p-2 font-semibold first:border-l border-t text-left"
+                className="border-r border-gray-200 p-2 font-medium first:border-l border-t text-left"
                 {...props}
               >
                 {children}

@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ImagePlus, Hammer, X, FileText, Send, NotebookPen, ChevronDown, Check } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { cn } from '../lib/utils';
 import MessageList from '../components/MessageList';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 
 const ContextPill = ({ title, onRemove }) => (
   <Badge variant="outline" className="inline-flex items-center gap-2 bg-background/50 backdrop-blur-sm border-border/50 text-foreground shadow-sm">
@@ -22,8 +23,6 @@ const ContextPill = ({ title, onRemove }) => (
 );
 
 const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact = false, modelConfigs = {} }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  
   const getDisplayName = (model) => {
     const modelInfo = modelConfigs[model];
     let displayName = model;
@@ -44,51 +43,27 @@ const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact =
     return displayName;
   };
 
+  // Sort models alphabetically
+  const sortedModels = useMemo(() => {
+    return [...models].sort((a, b) => {
+      const nameA = getDisplayName(a).toLowerCase();
+      const nameB = getDisplayName(b).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [models, modelConfigs]);
+
   return (
-    <div className="relative">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "text-xs border-border/50 bg-background/50 hover:bg-background/70 justify-between",
-          isCompact ? "h-5 w-32 px-2" : "h-6 w-36"
-        )}
-      >
-        <span className="truncate">{getDisplayName(selectedModel)}</span>
-        <ChevronDown size={12} className="ml-1 shrink-0" />
-      </Button>
-      
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => setIsOpen(false)}
-            style={{ WebkitAppRegion: 'no-drag' }}
-          />
-          
-          {/* Dropdown */}
-          <div className={cn(
-            "absolute z-50 mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto",
-            isCompact ? "w-64 right-0" : "w-64 left-0"
-          )}>
-            {models.map((model) => (
-              <button
-                key={model}
-                onClick={() => {
-                  onModelChange(model);
-                  setIsOpen(false);
-                }}
-                className="w-full px-3 py-2 text-xs text-left hover:bg-accent hover:text-accent-foreground flex items-center justify-between"
-              >
-                <span className="truncate">{getDisplayName(model)}</span>
-                {selectedModel === model && <Check size={12} className="ml-2 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+    <div className={cn("relative", isCompact ? "w-32" : "w-48")}>
+      <SearchableSelect
+        value={selectedModel}
+        onValueChange={onModelChange}
+        options={sortedModels}
+        placeholder="Select model"
+        className="w-full"
+        getDisplayValue={(value) => getDisplayName(value)}
+        getOptionLabel={(model) => getDisplayName(model)}
+        getOptionValue={(model) => model}
+      />
     </div>
   );
 };
@@ -190,12 +165,24 @@ const PopupPage = () => {
       const configs = await window.electron.getModelConfigs();
       setModelConfigs(configs);
       const availableModels = Object.keys(configs).filter(key => key !== 'default');
-      setModels(availableModels);
       
-      if (availableModels.length > 0) {
-        setSelectedModel(availableModels[0]);
+      // Sort models alphabetically by display name
+      const sortedModels = availableModels.sort((a, b) => {
+        const getDisplayName = (modelId) => {
+          const modelInfo = configs[modelId];
+          return modelInfo?.displayName || modelId;
+        };
+        const nameA = getDisplayName(a).toLowerCase();
+        const nameB = getDisplayName(b).toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      
+      setModels(sortedModels);
+      
+      if (sortedModels.length > 0) {
+        setSelectedModel(sortedModels[0]);
         // Check if the selected model supports vision
-        const modelInfo = configs[availableModels[0]];
+        const modelInfo = configs[sortedModels[0]];
         setVisionSupported(modelInfo?.vision_supported || false);
       }
 
@@ -557,7 +544,7 @@ const PopupPage = () => {
       {isExpanded && (
         <>
           {/* Header - Only shows when expanded */}
-          <div className="px-4 pt-3 pb-2 flex justify-between items-center border-b border-border/30 sticky top-0 z-50 bg-background/95 backdrop-blur-sm" style={{ WebkitAppRegion: 'drag' }}>
+          <div className="px-4 pt-3 pb-2 flex justify-between items-center sticky top-0 z-50 bg-background/95 backdrop-blur-sm" style={{ WebkitAppRegion: 'drag' }}>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -604,7 +591,7 @@ const PopupPage = () => {
       )}
 
       {/* Input Area */}
-      <div className={cn("bg-white backdrop-blur-sm border-t border-border/30 rounded-b-3xl sticky bottom-0", {
+      <div className={cn("bg-white backdrop-blur-sm rounded-b-3xl sticky bottom-0", {
         "flex-1 flex items-center rounded-3xl": !isExpanded,
       })}>
         <div className="p-4 w-full space-y-3">

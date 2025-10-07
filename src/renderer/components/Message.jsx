@@ -35,7 +35,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   const bubbleStyle = isUser ? 'bg-gray-200' : ''; // No background for assistant/system
   const bubbleClasses = isUser
     ? `relative overflow-x-auto px-4 py-3 rounded-lg max-w-xl max-h-[500px] overflow-y-auto cursor-pointer ${bubbleStyle}`
-    : `relative overflow-x-auto my-3 py-3 w-full border-b border-gray-300`; // Assistant bubbles full-width, no background
+    : `relative overflow-x-auto w-full`; // Assistant bubbles full-width, no background
   const wrapperClasses = `message-content-wrapper ${isUser ? 'text-black' : 'text-black'} break-words`; // Keep text white for both, use break-words
 
   const toggleReasoning = () => setShowReasoning(!showReasoning);
@@ -72,7 +72,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
 
         {/* Simple dropdowns - always visible when content exists */}
         {!isUser && (hasReasoning || hasExecutedTools) && (
-          <div className="pb-5 border-b border-gray-300 space-y-2">
+          <div className="pb-5 space-y-2">
             <div className="flex flex-wrap gap-2">
               {/* Reasoning dropdown - blue */}
               {hasReasoning && (
@@ -248,13 +248,17 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
         </div>
         
         {/* MCP tool calls */}
-        {tool_calls && tool_calls.map((toolCall, index) => (
-          <ToolCall 
-            key={toolCall.id || index} 
-            toolCall={toolCall} 
-            toolResult={findToolResult(toolCall.id)}
-          />
-        ))}
+        {tool_calls && tool_calls.length > 0 && (
+          <div className="mb-4">
+            {tool_calls.map((toolCall, index) => (
+              <ToolCall 
+                key={toolCall.id || index} 
+                toolCall={toolCall} 
+                toolResult={findToolResult(toolCall.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

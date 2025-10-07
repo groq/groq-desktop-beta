@@ -1,13 +1,7 @@
 import { ArrowUp, Loader2, ImagePlus, Hammer, Upload, Zap, ZapOff, Square } from "lucide-react";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState, useMemo } from "react";
 import TextAreaAutosize from "react-textarea-autosize";
-import { 
-	Select, 
-	SelectContent, 
-	SelectItem, 
-	SelectTrigger, 
-	SelectValue 
-} from "./ui/select";
+import { SearchableSelect } from "./ui/SearchableSelect";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { ChatContext } from "../context/ChatContext";
@@ -43,6 +37,15 @@ function ChatInput({
 		// If no explicit displayName is configured, return the raw modelId without auto-capitalization
 		return modelId;
 	};
+
+	// Sort models alphabetically by display name
+	const sortedModels = useMemo(() => {
+		return [...models].sort((a, b) => {
+			const nameA = getModelDisplayName(a).toLowerCase();
+			const nameB = getModelDisplayName(b).toLowerCase();
+			return nameA.localeCompare(nameB);
+		});
+	}, [models, modelConfigs]);
 	const [isDragOver, setIsDragOver] = useState(false);
 	const [fullScreenImage, setFullScreenImage] = useState(null);
 	const textareaRef = useRef(null);
@@ -474,20 +477,17 @@ function ChatInput({
 						)}
 						
 						{/* Model Selector */}
-						<Select value={selectedModel} onValueChange={onModelChange}>
-							<SelectTrigger className="w-48 h-8 rounded-xl border-border/50 bg-background/50 text-sm text-foreground">
-								<SelectValue placeholder="Select model" className="text-foreground">
-									{selectedModel ? getModelDisplayName(selectedModel) : "Select model"}
-								</SelectValue>
-							</SelectTrigger>
-							<SelectContent className="rounded-xl">
-								{models.map(model => (
-									<SelectItem key={model} value={model} className="rounded-lg text-foreground">
-										{getModelDisplayName(model)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<SearchableSelect
+							value={selectedModel}
+							onValueChange={onModelChange}
+							options={sortedModels}
+							placeholder="Select model"
+							className="w-48"
+							disabled={loading}
+							getDisplayValue={(value) => getModelDisplayName(value)}
+							getOptionLabel={(model) => getModelDisplayName(model)}
+							getOptionValue={(model) => model}
+						/>
 					</div>
 				</div>
 			</div>

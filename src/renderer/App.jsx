@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
@@ -107,6 +107,24 @@ function App() {
   
   // Models list derived from capabilities keys
   // const models = Object.keys(MODEL_CAPABILITIES).filter(key => key !== 'default');
+
+  // Sort models alphabetically by display name for consistent ordering
+  const sortedModels = useMemo(() => {
+    return [...models].sort((a, b) => {
+      // Get display names from modelConfigs
+      const getDisplayName = (modelId) => {
+        const modelInfo = modelConfigs[modelId];
+        if (modelInfo && modelInfo.displayName) {
+          return modelInfo.displayName;
+        }
+        return modelId;
+      };
+      
+      const nameA = getDisplayName(a).toLowerCase();
+      const nameB = getDisplayName(b).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [models, modelConfigs]);
 
   // Function to update the server status display - moved outside useEffect
   const updateServerStatus = (tools, settings) => {
@@ -1072,7 +1090,7 @@ function App() {
                     Build Fast
                   </h1>
                   <p className="text-xl text-muted-foreground max-w-2xl">
-                    Chat with AI models powered by Groq's lightning-fast inference engine
+                    Try the speed of Groq...
                   </p>
                 </div>
 
@@ -1083,7 +1101,7 @@ function App() {
                     onStopGeneration={handleStopGeneration}
                     loading={loading}
                     visionSupported={visionSupported}
-                    models={models}
+                    models={sortedModels}
                     selectedModel={selectedModel}
                     onModelChange={setSelectedModel}
                     onOpenMcpTools={() => setIsToolsPanelOpen(true)}
@@ -1103,13 +1121,13 @@ function App() {
                   <div ref={messagesEndRef} />
                 </div>
                 
-                <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur pt-6">
+                <div className="flex-shrink-0 bg-background/95 backdrop-blur pt-6">
                   <ChatInput
                     onSendMessage={handleSendMessage}
                     onStopGeneration={handleStopGeneration}
                     loading={loading}
                     visionSupported={visionSupported}
-                    models={models}
+                    models={sortedModels}
                     selectedModel={selectedModel}
                     onModelChange={setSelectedModel}
                     onOpenMcpTools={() => setIsToolsPanelOpen(true)}

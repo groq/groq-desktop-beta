@@ -10,66 +10,6 @@ let cachedModels = null;
 let lastFetchTime = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Manual overrides for specific models (if needed)
-// These override the automatic heuristics for specific models
-const MANUAL_OVERRIDES = {
-  "compound-beta": {
-    context: 131072,
-    vision_supported: false,
-    builtin_tools_supported: false,
-  },
-  "openai/gpt-oss-20b": {
-    context: 131072,
-    vision_supported: false,
-    builtin_tools_supported: true,
-  },
-  "openai/gpt-oss-120b": {
-    context: 131072,
-    vision_supported: false,
-    builtin_tools_supported: true,
-  },
-  "moonshotai/kimi-k2-instruct": {
-    context: 131072,
-    vision_supported: true,
-    builtin_tools_supported: false,
-  },
-  "meta-llama/llama-4-scout-17b-16e-instruct": {
-    context: 131072,
-    vision_supported: true,
-    builtin_tools_supported: false,
-  },
-  "meta-llama/llama-4-maverick-17b-128e-instruct": {
-    context: 131072,
-    vision_supported: true,
-    builtin_tools_supported: false,
-  },
-  "qwen/qwen3-32b": {
-    context: 131072,
-    vision_supported: false,
-    builtin_tools_supported: false,
-  },
-  "llama-3.3-70b-versatile": {
-    context: 128000,
-    vision_supported: false,
-    builtin_tools_supported: false,
-  },
-  "qwen-qwq-32b": {
-    context: 128000,
-    vision_supported: true,
-    builtin_tools_supported: false,
-  },
-  "deepseek-r1-distill-llama-70b": {
-    context: 128000,
-    vision_supported: false,
-    builtin_tools_supported: false,
-  },
-  "emberglow/small": {
-    context: 8192,
-    vision_supported: false,
-    builtin_tools_supported: true,
-  }
-};
-
 /**
  * Apply heuristics to determine model capabilities based on name
  */
@@ -168,13 +108,8 @@ function convertAPIModelsToContextSizes(apiResponse) {
   chatModels.forEach(model => {
     const modelId = model.id;
     
-    // Check for manual override first
-    if (MANUAL_OVERRIDES[modelId]) {
-      modelContextSizes[modelId] = { ...MANUAL_OVERRIDES[modelId] };
-    } else {
-      // Apply heuristics
-      modelContextSizes[modelId] = applyModelHeuristics(modelId, model);
-    }
+    // Apply heuristics to determine model capabilities
+    modelContextSizes[modelId] = applyModelHeuristics(modelId, model);
   });
   
   console.log(`Loaded ${chatModels.length} chat models from API`);
