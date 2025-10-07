@@ -23,6 +23,7 @@ function Settings() {
     customCompletionUrl: '',
     toolOutputLimit: 8000,
     customApiBaseUrl: '',
+    customApiBaseUrlEnabled: false,
     customModels: {},
     builtInTools: {
       codeInterpreter: false,
@@ -38,13 +39,15 @@ function Settings() {
     command: '',
     args: '',
     env: {},
-    url: ''
+    url: '',
+    headers: {}
   });
   const [useJsonInput, setUseJsonInput] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState(null);
   const [settingsPath, setSettingsPath] = useState('');
   const [newEnvVar, setNewEnvVar] = useState({ key: '', value: '' });
+  const [newHeader, setNewHeader] = useState({ key: '', value: '' });
   const [editingServerId, setEditingServerId] = useState(null);
   const [newCustomModel, setNewCustomModel] = useState({
     id: '',
@@ -89,6 +92,7 @@ function Settings() {
             customCompletionUrl: '',
             toolOutputLimit: 8000,
             customApiBaseUrl: '',
+            customApiBaseUrlEnabled: false,
             customModels: {},
             builtInTools: {
                 codeInterpreter: false,
@@ -200,10 +204,11 @@ function Settings() {
     setNewMcpServer(prev => ({
         ...prev,
         transport: transportType,
-        command: transportType === 'sse' ? '' : prev.command,
-        args: transportType === 'sse' ? '' : prev.args,
-        env: transportType === 'sse' ? {} : prev.env,
-        url: transportType === 'stdio' ? '' : prev.url
+        command: (transportType === 'sse' || transportType === 'streamableHttp') ? '' : prev.command,
+        args: (transportType === 'sse' || transportType === 'streamableHttp') ? '' : prev.args,
+        env: (transportType === 'sse' || transportType === 'streamableHttp') ? {} : prev.env,
+        url: transportType === 'stdio' ? '' : prev.url,
+        headers: transportType === 'stdio' ? {} : prev.headers
     }));
     setJsonInput('');
     setJsonError(null);
@@ -240,6 +245,37 @@ function Settings() {
     setNewEnvVar(prev => ({ ...prev, [name]: value }));
   };
 
+  const addHeader = () => {
+    if (!newHeader.key) return;
+    
+    console.log('Adding header:', newHeader.key, '=', newHeader.value);
+    
+    setNewMcpServer(prev => ({
+      ...prev,
+      headers: {
+        ...prev.headers,
+        [newHeader.key]: newHeader.value
+      }
+    }));
+    
+    setNewHeader({ key: '', value: '' });
+  };
+
+  const removeHeader = (key) => {
+    setNewMcpServer(prev => {
+      const updatedHeaders = { ...prev.headers };
+      delete updatedHeaders[key];
+      return { ...prev, headers: updatedHeaders };
+    });
+    setUseJsonInput(false);
+    setJsonError(null);
+  };
+
+  const handleHeaderChange = (e) => {
+    const { name, value } = e.target;
+    setNewHeader(prev => ({ ...prev, [name]: value }));
+  };
+
   const handleJsonInputChange = (e) => {
     setJsonInput(e.target.value);
     setJsonError(null);
@@ -262,7 +298,8 @@ function Settings() {
       const serverEntry = {};
       
       // Check for transport type in JSON (optional, default to stdio if missing)
-      const transport = parsedJson.transport === 'sse' ? 'sse' : 'stdio';
+      const transport = parsedJson.transport === 'sse' ? 'sse' : 
+                        parsedJson.transport === 'streamableHttp' ? 'streamableHttp' : 'stdio';
       serverEntry.transport = transport;
 
       if (transport === 'stdio') {
@@ -467,6 +504,10 @@ function Settings() {
               transport: newMcpServer.transport,
               url: newMcpServer.url
           };
+          // Include headers if present
+          if (newMcpServer.headers && Object.keys(newMcpServer.headers).length > 0) {
+              serverConfig.headers = newMcpServer.headers;
+          }
       }
     }
 
@@ -485,7 +526,7 @@ function Settings() {
     saveSettings(updatedSettings);
     
     // Clear the form, reset to stdio default
-    setNewMcpServer({ id: '', transport: 'stdio', command: '', args: '', env: {}, url: '' });
+    setNewMcpServer({ id: '', transport: 'stdio', command: '', args: '', env: {}, url: '', headers: {} });
     setJsonInput('');
     setJsonError(null);
     setEditingServerId(null); // Reset editing state after save
@@ -528,7 +569,7 @@ function Settings() {
 
 
     // Populate form fields based on transport type
-    let command = '', argsArray = [], envObject = {}, argsString = '', url = '';
+    let command = '', argsArray = [], envObject = {}, argsString = '', url = '', headersObject = {};
     if (transport === 'stdio') {
         command = serverToEdit.command || '';
         argsArray = Array.isArray(serverToEdit.args) ? serverToEdit.args : [];
@@ -536,6 +577,7 @@ function Settings() {
         argsString = argsArray.join(' ');
     } else { // sse or streamableHttp
         url = serverToEdit.url || '';
+        headersObject = typeof serverToEdit.headers === 'object' && serverToEdit.headers !== null ? serverToEdit.headers : {};
         // Ensure stdio fields are clear
         command = '';
         argsString = '';
@@ -548,7 +590,8 @@ function Settings() {
       command: command,
       args: argsString,
       env: envObject,
-      url: url // URL will be populated correctly now
+      url: url, // URL will be populated correctly now
+      headers: headersObject
     });
 
     // Also populate the JSON input field based on the correct structure
@@ -559,6 +602,10 @@ function Settings() {
       } else { // sse or streamableHttp
           // Use the determined transport type for the JSON representation
           jsonConfig = { transport: transport, url };
+          // Include headers if present
+          if (headersObject && Object.keys(headersObject).length > 0) {
+              jsonConfig.headers = headersObject;
+          }
       }
       const jsonString = JSON.stringify(jsonConfig, null, 2);
       setJsonInput(jsonString);
@@ -578,7 +625,7 @@ function Settings() {
   // Function to cancel editing
   const cancelEditing = () => {
     setEditingServerId(null);
-    setNewMcpServer({ id: '', transport: 'stdio', command: '', args: '', env: {}, url: '' }); // Reset form
+    setNewMcpServer({ id: '', transport: 'stdio', command: '', args: '', env: {}, url: '', headers: {} }); // Reset form
     setJsonInput('');
     setJsonError(null);
   };
@@ -842,7 +889,19 @@ function Settings() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="custom-api-base-url">Custom API Base URL (Optional)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="custom-api-base-url">Custom API Base URL (Optional)</Label>
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="custom-api-base-url-enabled" className="text-sm font-normal text-muted-foreground">
+                        {settings.customApiBaseUrlEnabled ? 'Enabled' : 'Disabled'}
+                      </Label>
+                      <Switch
+                        id="custom-api-base-url-enabled"
+                        checked={settings.customApiBaseUrlEnabled || false}
+                        onChange={(e) => handleToggleChange('customApiBaseUrlEnabled', e.target.checked)}
+                      />
+                    </div>
+                  </div>
                   <Input
                     type="text"
                     id="custom-api-base-url"
@@ -850,12 +909,14 @@ function Settings() {
                     value={settings.customApiBaseUrl || ''}
                     onChange={handleChange}
                     placeholder="e.g., https://api.groq.com/openai/v1/ or http://127.0.0.1:8000/v1/"
+                    disabled={!settings.customApiBaseUrlEnabled}
+                    className={!settings.customApiBaseUrlEnabled ? 'opacity-50' : ''}
                   />
                   <p className="text-xs text-muted-foreground">
                     <strong>Important:</strong> URL must end with <code className="text-xs bg-muted px-1 py-0.5 rounded">/v1/</code> (with trailing slash).
                     For Groq-compatible endpoints: <code className="text-xs bg-muted px-1 py-0.5 rounded">https://api.groq.com/openai/v1/</code>.
                     For custom OpenAI-compatible endpoints: <code className="text-xs bg-muted px-1 py-0.5 rounded">http://your-server/v1/</code>.
-                    Leave empty to use the default Groq API.
+                    {settings.customApiBaseUrlEnabled ? ' Toggle off to use the default Groq API.' : ' Toggle on to enable custom API base URL.'}
                   </p>
                 </div>
               </CardContent>
@@ -1060,12 +1121,13 @@ function Settings() {
                                 <div className="flex items-center space-x-2">
                                   <Badge variant="secondary">{id}</Badge>
                                   <Badge variant="outline" className="text-xs">
-                                    {config.transport === 'sse' ? 'SSE' : 'Stdio'}
+                                    {config.transport === 'sse' ? 'SSE' : 
+                                     config.transport === 'streamableHttp' ? 'Streamable HTTP' : 'Stdio'}
                                   </Badge>
                                 </div>
                                 
                                 <div className="text-sm text-muted-foreground font-mono">
-                                  {config.transport === 'sse' ? (
+                                  {config.transport === 'sse' || config.transport === 'streamableHttp' ? (
                                     <span>URL: {config.url}</span>
                                   ) : (
                                     <span>$ {config.command} {(config.args || []).join(' ')}</span>
@@ -1075,6 +1137,12 @@ function Settings() {
                                 {config.env && Object.keys(config.env).length > 0 && (
                                   <div className="text-xs text-muted-foreground">
                                     <span>Environment variables: {Object.keys(config.env).length} configured</span>
+                                  </div>
+                                )}
+                                
+                                {config.headers && Object.keys(config.headers).length > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    <span>Custom headers: {Object.keys(config.headers).length} configured</span>
                                   </div>
                                 )}
                               </div>
@@ -1183,6 +1251,73 @@ function Settings() {
                     </div>
                   )}
 
+                  {/* Headers Section for Remote Transports */}
+                  {(newMcpServer.transport === 'sse' || newMcpServer.transport === 'streamableHttp') && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Custom Headers</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Add custom HTTP headers for authentication or other purposes (e.g., Authorization, X-API-Key)
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {Object.entries(newMcpServer.headers || {}).map(([key, value]) => (
+                            <div key={key} className="flex items-center space-x-2">
+                              <div className="flex-1 grid grid-cols-2 gap-2">
+                                <Input value={key} disabled className="bg-muted" />
+                                <Input 
+                                  value={
+                                    key.toLowerCase().includes('auth') || 
+                                    key.toLowerCase().includes('key') || 
+                                    key.toLowerCase().includes('token') || 
+                                    key.toLowerCase().includes('secret')
+                                      ? '*'.repeat(Math.min(value.length, 20))
+                                      : (typeof value === 'string' && value.length > 30 ? `${value.substring(0, 27)}...` : value)
+                                  } 
+                                  disabled 
+                                  className="bg-muted" 
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeHeader(key)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          
+                          <div className="flex items-center space-x-2">
+                            <Input
+                              name="key"
+                              value={newHeader.key}
+                              onChange={handleHeaderChange}
+                              placeholder="Header name (e.g., Authorization)"
+                              className="flex-1"
+                            />
+                            <Input
+                              name="value"
+                              value={newHeader.value}
+                              onChange={handleHeaderChange}
+                              placeholder="Header value (e.g., Bearer token123)"
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={addHeader}
+                              disabled={!newHeader.key}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Environment Variables Section */}
                   {newMcpServer.transport === 'stdio' && (
                     <div className="space-y-4">
@@ -1251,7 +1386,7 @@ function Settings() {
                       variant="outline"
                       onClick={() => {
                         setNewMcpServer({
-                          id: '', transport: 'stdio', command: '', args: '', env: {}
+                          id: '', transport: 'stdio', command: '', args: '', env: {}, url: '', headers: {}
                         });
                         setJsonInput('');
                         setJsonError(null);
@@ -1262,10 +1397,10 @@ function Settings() {
                     </Button>
                     <Button
                       onClick={handleSaveMcpServer}
-                      disabled={!newMcpServer.id || (newMcpServer.transport === 'stdio' && !newMcpServer.command)}
+                      disabled={!newMcpServer.id || (newMcpServer.transport === 'stdio' && !newMcpServer.command) || ((newMcpServer.transport === 'sse' || newMcpServer.transport === 'streamableHttp') && !newMcpServer.url)}
                     >
                       <Save className="h-4 w-4 mr-2" />
-                      Add Server
+                      {editingServerId ? 'Update Server' : 'Add Server'}
                     </Button>
                   </div>
                 </div>

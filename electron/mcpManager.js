@@ -177,18 +177,40 @@ async function connectMcpServerProcess(serverId, connectionDetails, authProvider
         if (transportType === 'sse') {
             const sseUrl = new URL(connectionDetails.url);
             console.log(`Creating SSEClientTransport for ${sseUrl.toString()}`);
-            // Pass the authProvider directly if provided (during retry)
-            // Omit requestInit/eventSourceInit with headers
-            transport = new SSEClientTransport(sseUrl, {
-                authProvider: authProviderInstance // Pass the static provider here
-            });
+            
+            // Build transport options with authProvider and headers
+            const sseOptions = {
+                authProvider: authProviderInstance
+            };
+            
+            // Add custom headers if provided in connection details
+            if (connectionDetails.headers && typeof connectionDetails.headers === 'object' && Object.keys(connectionDetails.headers).length > 0) {
+                console.log(`[${serverId}] Adding custom headers to SSE transport:`, Object.keys(connectionDetails.headers));
+                sseOptions.eventSourceInit = {
+                    headers: connectionDetails.headers
+                };
+            }
+            
+            transport = new SSEClientTransport(sseUrl, sseOptions);
 
         } else if (transportType === 'streamableHttp') {
             const httpUrl = new URL(connectionDetails.url);
             console.log(`Creating StreamableHTTPClientTransport for ${httpUrl.toString()}`);
-            transport = new StreamableHTTPClientTransport(httpUrl, {
+            
+            // Build transport options with authProvider and headers
+            const httpOptions = {
                 authProvider: authProviderInstance
-            });
+            };
+            
+            // Add custom headers if provided in connection details
+            if (connectionDetails.headers && typeof connectionDetails.headers === 'object' && Object.keys(connectionDetails.headers).length > 0) {
+                console.log(`[${serverId}] Adding custom headers to Streamable HTTP transport:`, Object.keys(connectionDetails.headers));
+                httpOptions.requestInit = {
+                    headers: connectionDetails.headers
+                };
+            }
+            
+            transport = new StreamableHTTPClientTransport(httpUrl, httpOptions);
 
         } else { // stdio
             // Construct the PATH needed by the script based on platform
@@ -427,6 +449,11 @@ async function connectConfiguredMcpServers() {
             if (!serverConfig.url) throw new Error(`Missing 'url' for ${transportType.toUpperCase()} server ${serverId}.`);
             try { new URL(serverConfig.url); connectionDetails.url = serverConfig.url; } catch (e) { throw new Error(`Invalid 'url' for ${transportType.toUpperCase()} ${serverId}: ${e.message}`); }
             console.log(`[MCP AUTO-CONNECT] ${serverId} URL: ${serverConfig.url}`);
+            // Include headers if present in server config
+            if (serverConfig.headers && typeof serverConfig.headers === 'object') {
+                connectionDetails.headers = serverConfig.headers;
+                console.log(`[MCP AUTO-CONNECT] ${serverId} custom headers: ${Object.keys(serverConfig.headers).length} configured`);
+            }
         } else { // stdio
             if (!serverConfig.command) throw new Error(`Missing 'command' for stdio server ${serverId}.`);
             connectionDetails.command = resolveCommandPathFunc(serverConfig.command);
@@ -509,6 +536,11 @@ function initializeMcpHandlers(ipcMain, app, mainWindow, loadSettings, resolveCo
         if (connectionDetails.transport === 'sse' || connectionDetails.transport === 'streamableHttp') {
             if (!url) return { success: false, error: `Missing 'url' for ${connectionDetails.transport.toUpperCase()} server ${id}`, tools: [], allTools: discoveredTools };
             try { new URL(url); connectionDetails.url = url; } catch (e) { return { success: false, error: `Invalid 'url' for ${connectionDetails.transport.toUpperCase()} ${id}: ${e.message}`, tools: [], allTools: discoveredTools }; }
+            // Include headers if present in server config
+            const headers = serverConfig.headers;
+            if (headers && typeof headers === 'object' && Object.keys(headers).length > 0) {
+                connectionDetails.headers = headers;
+            }
         } else { // stdio
             if (command) {
                 const resolvedCommand = resolveCommandPathFunc(command);

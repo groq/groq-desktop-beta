@@ -350,8 +350,8 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
 
         const groqConfig = { apiKey: settings.GROQ_API_KEY };
         
-        // Use custom API base URL if provided (use exactly as provided)
-        if (settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
+        // Use custom API base URL if enabled and provided (use exactly as provided)
+        if (settings.customApiBaseUrlEnabled && settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
             groqConfig.baseURL = settings.customApiBaseUrl.trim();
             console.log(`Using custom base URL: ${groqConfig.baseURL}`);
         }
@@ -360,7 +360,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         
         // Monkey patch the SDK when using custom baseURL
         // Custom baseURL should end with /v1/ (e.g., http://example.com/v1/ or https://api.groq.com/openai/v1/)
-        if (settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
+        if (settings.customApiBaseUrlEnabled && settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
             const originalPost = groq.post.bind(groq);
             const originalBuildURL = groq.buildURL.bind(groq);
             

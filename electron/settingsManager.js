@@ -23,6 +23,7 @@ function loadSettings() {
             customCompletionUrl: '',
             toolOutputLimit: 8000,
             customApiBaseUrl: '',
+            customApiBaseUrlEnabled: false,
             customModels: {}
         };
     }
@@ -41,6 +42,7 @@ function loadSettings() {
         customCompletionUrl: '',
         toolOutputLimit: 8000,
         customApiBaseUrl: '',
+        customApiBaseUrlEnabled: false,
         customModels: {}
     };
 
@@ -80,6 +82,7 @@ function loadSettings() {
             settings.customCompletionUrl = settings.customCompletionUrl || defaultSettings.customCompletionUrl;
             settings.toolOutputLimit = settings.toolOutputLimit ?? defaultSettings.toolOutputLimit;
             settings.customApiBaseUrl = settings.customApiBaseUrl || defaultSettings.customApiBaseUrl;
+            settings.customApiBaseUrlEnabled = settings.customApiBaseUrlEnabled ?? defaultSettings.customApiBaseUrlEnabled;
             settings.customModels = settings.customModels || defaultSettings.customModels;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
