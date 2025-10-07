@@ -2,6 +2,9 @@ const Groq = require('groq-sdk');
 const { pruneMessageHistory } = require('./messageUtils');
 const { supportsBuiltInTools } = require('../shared/models');
 
+// Track active streams to allow cancellation
+const activeStreams = new Map();
+
 function validateApiKey(settings) {
     if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
         throw new Error("API key not configured. Please add your GROQ API key in settings.");
@@ -275,7 +278,7 @@ function handleStreamCompletion(event, accumulatedData, finishReason) {
 }
 
 // Executes stream with retry logic for tool_use_failed errors
-async function executeStreamWithRetry(groq, chatCompletionParams, event) {
+async function executeStreamWithRetry(groq, chatCompletionParams, event, streamId) {
     const MAX_TOOL_USE_RETRIES = 3;
     let retryCount = 0;
 
@@ -290,21 +293,55 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event) {
                 streamId: null
             };
 
+            // Check if stream was cancelled before starting
+            const streamInfo = activeStreams.get(streamId);
+            if (!streamInfo || streamInfo.cancelled) {
+                console.log(`Stream ${streamId} was cancelled before starting`);
+                event.sender.send('chat-stream-cancelled', { streamId });
+                activeStreams.delete(streamId);
+                return;
+            }
+
             const stream = await groq.chat.completions.create(chatCompletionParams);
+            
+            // Store the stream iterator for potential cancellation
+            if (streamInfo) {
+                streamInfo.stream = stream;
+            }
 
             for await (const chunk of stream) {
+                // Check if stream was cancelled during iteration
+                const currentStreamInfo = activeStreams.get(streamId);
+                if (!currentStreamInfo || currentStreamInfo.cancelled) {
+                    console.log(`Stream ${streamId} was cancelled during processing`);
+                    event.sender.send('chat-stream-cancelled', { streamId });
+                    activeStreams.delete(streamId);
+                    return;
+                }
+
                 const finishReason = processStreamChunk(chunk, event, accumulatedData);
 
                 if (finishReason) {
                     handleStreamCompletion(event, accumulatedData, finishReason);
+                    activeStreams.delete(streamId);
                     return;
                 }
             }
 
+            activeStreams.delete(streamId);
             event.sender.send('chat-stream-error', { error: "Stream ended unexpectedly." });
             return;
 
         } catch (error) {
+            // Check if this was a cancellation
+            const streamInfo = activeStreams.get(streamId);
+            if (streamInfo && streamInfo.cancelled) {
+                console.log(`Stream ${streamId} error due to cancellation`);
+                event.sender.send('chat-stream-cancelled', { streamId });
+                activeStreams.delete(streamId);
+                return;
+            }
+
             const isToolUseFailedError = error?.error?.code === 'tool_use_failed' || error?.message?.includes('tool_use_failed');
 
             if (isToolUseFailedError && retryCount < MAX_TOOL_USE_RETRIES) {
@@ -313,6 +350,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event) {
             }
 
             const errorMessage = error instanceof Error ? error.message : String(error);
+            activeStreams.delete(streamId);
             event.sender.send('chat-stream-error', {
                 error: `Failed to get chat completion: ${errorMessage}`,
                 details: error
@@ -321,6 +359,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event) {
         }
     }
 
+    activeStreams.delete(streamId);
     event.sender.send('chat-stream-error', {
         error: `The model repeatedly failed to use tools correctly after ${MAX_TOOL_USE_RETRIES + 1} attempts. Please try rephrasing your request.`
     });
@@ -338,13 +377,24 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event) {
  * @param {Array<object>} discoveredTools - Available MCP tools
  */
 async function handleChatStream(event, messages, model, settings, modelContextSizes, discoveredTools) {
+    // Generate unique stream ID
+    const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
+        // Register this stream as active
+        activeStreams.set(streamId, {
+            cancelled: false,
+            stream: null,
+            event: event
+        });
+
         validateApiKey(settings);
         const { modelToUse, modelInfo } = determineModel(model, settings, modelContextSizes);
         const visionCheckPassed = checkVisionSupport(messages, modelInfo, modelToUse, event);
         
         // If vision check failed, return early
         if (!visionCheckPassed) {
+            activeStreams.delete(streamId);
             return;
         }
 
@@ -387,10 +437,32 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         const prunedMessages = pruneMessageHistory(cleanedMessages, modelToUse, modelContextSizes);
         const chatCompletionParams = buildApiParams(prunedMessages, modelToUse, settings, tools, modelContextSizes);
 
-        await executeStreamWithRetry(groq, chatCompletionParams, event);
+        await executeStreamWithRetry(groq, chatCompletionParams, event, streamId);
     } catch (outerError) {
+        activeStreams.delete(streamId);
         event.sender.send('chat-stream-error', { error: outerError.message || `Setup error: ${outerError}` });
     }
 }
 
-module.exports = { handleChatStream };
+/**
+ * Stops an active chat stream
+ * @param {string} streamId - The ID of the stream to stop (optional, stops all if not provided)
+ */
+function stopChatStream(streamId) {
+    if (streamId) {
+        const streamInfo = activeStreams.get(streamId);
+        if (streamInfo) {
+            console.log(`Stopping stream ${streamId}`);
+            streamInfo.cancelled = true;
+            // Note: The actual stream interruption happens in the iteration loop
+        }
+    } else {
+        // Stop all active streams
+        console.log(`Stopping all active streams (${activeStreams.size} total)`);
+        for (const [id, streamInfo] of activeStreams.entries()) {
+            streamInfo.cancelled = true;
+        }
+    }
+}
+
+module.exports = { handleChatStream, stopChatStream };

@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('chat-stream-error', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-error', callback);
       },
+      onCancelled: (callback) => {
+        ipcRenderer.on('chat-stream-cancelled', (_, data) => callback(data));
+        return () => ipcRenderer.removeListener('chat-stream-cancelled', callback);
+      },
       cleanup: () => {
         ipcRenderer.removeAllListeners('chat-stream-start');
         ipcRenderer.removeAllListeners('chat-stream-content');
@@ -51,8 +55,14 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('chat-stream-tool-execution');
         ipcRenderer.removeAllListeners('chat-stream-complete');
         ipcRenderer.removeAllListeners('chat-stream-error');
+        ipcRenderer.removeAllListeners('chat-stream-cancelled');
       }
     };
+  },
+  
+  // Stop chat stream
+  stopChatStream: () => {
+    ipcRenderer.send('stop-chat-stream');
   },
   
   // MCP related functions

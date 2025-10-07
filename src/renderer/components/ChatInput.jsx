@@ -1,4 +1,4 @@
-import { ArrowUp, Loader2, ImagePlus, Hammer, Upload, Zap, ZapOff } from "lucide-react";
+import { ArrowUp, Loader2, ImagePlus, Hammer, Upload, Zap, ZapOff, Square } from "lucide-react";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import TextAreaAutosize from "react-textarea-autosize";
 import { 
@@ -14,6 +14,7 @@ import { ChatContext } from "../context/ChatContext";
 
 function ChatInput({
 	onSendMessage,
+	onStopGeneration,
 	loading = false,
 	visionSupported = false,
 	models = [],
@@ -400,13 +401,17 @@ function ChatInput({
 					</div>
 					<div className="self-start">
 						<Button
-							type="submit"
+							type={loading ? "button" : "submit"}
 							size="icon"
 							className="h-12 w-12 rounded-2xl bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-							disabled={loading || (!message.trim() && files.length === 0)}
+							disabled={!loading && (!message.trim() && files.length === 0)}
+							onClick={loading ? (e) => {
+								e.preventDefault();
+								onStopGeneration?.();
+							} : undefined}
 						>
 							{loading ? (
-								<Loader2 className="w-5 h-5 animate-spin" />
+								<Square className="w-5 h-5" aria-hidden="true" />
 							) : (
 								<ArrowUp className="w-5 h-5" aria-hidden="true" />
 							)}

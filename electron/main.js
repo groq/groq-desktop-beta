@@ -23,7 +23,7 @@ console.log('Groq Desktop started, logging to', logFile);
 const { BrowserWindow, ipcMain, screen, shell } = require('electron');
 
 // Import shared models
-const { MODEL_CONTEXT_SIZES, getModelContextSizes } = require('../shared/models.js');
+const { MODEL_CONTEXT_SIZES, getModelContextSizes, getModelsFromAPIWithCache } = require('../shared/models.js');
 
 // Import handlers
 const chatHandler = require('./chatHandler');
@@ -194,18 +194,39 @@ app.whenReady().then(async () => {
   // Initialize command resolver first (might be needed by others)
   initializeCommandResolver(app);
 
-  // Load model context sizes from the JS module
+  // Load model context sizes from the API
   try {
-    modelContextSizes = MODEL_CONTEXT_SIZES;
-    console.log('Successfully loaded shared model definitions.');
+    const currentSettings = loadSettings();
+    if (currentSettings.GROQ_API_KEY && currentSettings.GROQ_API_KEY !== "<replace me>") {
+      console.log('Fetching models from Groq API...');
+      modelContextSizes = await getModelsFromAPIWithCache(currentSettings.GROQ_API_KEY);
+      console.log('Successfully loaded models from API.');
+    } else {
+      console.warn('No valid API key found, using default model configuration.');
+      modelContextSizes = MODEL_CONTEXT_SIZES;
+    }
   } catch (error) {
-    console.error('Failed to load shared model definitions:', error);
-    modelContextSizes = { 'default': { context: 8192, vision_supported: false } }; // Fallback
-  }// --- Early IPC Handlers required by popup and renderer before other init --- //
+    console.error('Failed to load models from API:', error);
+    modelContextSizes = MODEL_CONTEXT_SIZES; // Fallback
+  }
+
+  // --- Early IPC Handlers required by popup and renderer before other init --- //
   ipcMain.handle('get-model-configs', async () => {
     // Return a copy to prevent accidental modification with custom models merged in
     const currentSettings = loadSettings();
-    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {});
+    
+    // Try to fetch fresh models if API key is available
+    let apiModels = modelContextSizes;
+    if (currentSettings.GROQ_API_KEY && currentSettings.GROQ_API_KEY !== "<replace me>") {
+      try {
+        apiModels = await getModelsFromAPIWithCache(currentSettings.GROQ_API_KEY);
+      } catch (error) {
+        console.error('Error fetching models in get-model-configs:', error);
+        // Fall back to cached modelContextSizes
+      }
+    }
+    
+    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {}, apiModels);
     return JSON.parse(JSON.stringify(mergedModelContextSizes));
   });
 
@@ -271,10 +292,27 @@ app.whenReady().then(async () => {
     const currentSettings = loadSettings();
     const { discoveredTools } = mcpManager.getMcpState(); // Use module object
     
-    // Merge base models with custom models from settings
-    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {});
+    // Try to get fresh models from API
+    let apiModels = modelContextSizes;
+    if (currentSettings.GROQ_API_KEY && currentSettings.GROQ_API_KEY !== "<replace me>") {
+      try {
+        apiModels = await getModelsFromAPIWithCache(currentSettings.GROQ_API_KEY);
+      } catch (error) {
+        console.error('Error fetching models in chat-stream:', error);
+        // Fall back to cached modelContextSizes
+      }
+    }
+    
+    // Merge API models with custom models from settings
+    const mergedModelContextSizes = getModelContextSizes(currentSettings.customModels || {}, apiModels);
     
     chatHandler.handleChatStream(event, messages, model, currentSettings, mergedModelContextSizes, discoveredTools);
+  });
+
+  // Stop chat stream
+  ipcMain.on('stop-chat-stream', async (event) => {
+    console.log('[Main] Received stop-chat-stream request');
+    chatHandler.stopChatStream(); // Stop all active streams
   });
 
   // Tool execution (use module object)

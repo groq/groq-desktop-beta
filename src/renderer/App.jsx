@@ -93,6 +93,10 @@ function App() {
   const [externalContext, setExternalContext] = useState(null);
   // --- End Context Sharing State ---
 
+  // --- Cancellation State ---
+  const cancelledRef = useRef(false); // Track if current operation is cancelled
+  // --- End Cancellation State ---
+
   const handleRemoveLastMessage = () => {
     setMessages(prev => {
       if (prev.length === 0) return prev;
@@ -300,13 +304,32 @@ function App() {
     let needsPause = false;
 
     for (const toolCall of assistantMessage.tool_calls) {
+      // Check if operation was cancelled
+      if (cancelledRef.current) {
+        console.log('Tool execution cancelled by user');
+        return { status: 'cancelled', toolResponseMessages };
+      }
+
       const toolName = toolCall.function.name;
       const approvalStatus = getToolApprovalStatus(toolName);
 
       if (approvalStatus === 'always' || approvalStatus === 'yolo') {
         console.log(`Tool '${toolName}' automatically approved (${approvalStatus}). Executing...`);
         try {
+          // Check again before executing (in case cancelled during previous tool execution)
+          if (cancelledRef.current) {
+            console.log('Tool execution cancelled by user before executing tool');
+            return { status: 'cancelled', toolResponseMessages };
+          }
+          
           const resultMsg = await executeToolCall(toolCall);
+          
+          // Check again after execution completes
+          if (cancelledRef.current) {
+            console.log('Tool execution cancelled by user after tool completed');
+            return { status: 'cancelled', toolResponseMessages };
+          }
+          
           toolResponseMessages.push(resultMsg);
           // Update UI immediately for executed tool calls
           setMessages(prev => [...prev, resultMsg]);
@@ -350,6 +373,29 @@ function App() {
       setVisionSupported(false);
     }
   }, [selectedModel, modelConfigs]);
+
+  // Function to stop the ongoing generation
+  const handleStopGeneration = () => {
+    console.log('Stopping generation...');
+    cancelledRef.current = true; // Set cancellation flag
+    window.electron.stopChatStream();
+    setLoading(false); // Immediately set loading to false
+    // Clear any pending tool approval state
+    setPendingApprovalCall(null);
+    setPausedChatState(null);
+  };
+
+  // Cleanup function to stop any active streams when component unmounts (page reload/navigation)
+  useEffect(() => {
+    return () => {
+      // Stop any active streams when the component unmounts
+      if (loading) {
+        console.log('Component unmounting, stopping active streams...');
+        cancelledRef.current = true;
+        window.electron.stopChatStream();
+      }
+    };
+  }, [loading]);
 
   // Core function to execute a chat turn (fetch response, handle tools)
   // Refactored from the main loop of handleSendMessage
@@ -510,6 +556,32 @@ function App() {
                 });
                 reject(new Error(error));
             });
+
+            streamHandler.onCancelled(() => {
+                console.log('Stream was cancelled by user');
+                // Remove the streaming placeholder or mark it as cancelled
+                setMessages(prev => {
+                    const newMessages = [...prev];
+                    const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
+                    if (idx !== -1) {
+                        // If there's content, keep it; otherwise remove the placeholder
+                        if (finalAssistantData.content.trim()) {
+                            newMessages[idx] = {
+                                role: 'assistant',
+                                content: finalAssistantData.content,
+                                isStreaming: false
+                            };
+                        } else {
+                            // Remove empty placeholder
+                            newMessages.splice(idx, 1);
+                        }
+                    }
+                    return newMessages;
+                });
+                // Resolve with a special status to indicate cancellation
+                currentTurnStatus = 'cancelled';
+                reject(new Error('CANCELLED'));
+            });
         });
 
         // Clean up stream handlers
@@ -527,6 +599,8 @@ function App() {
 
             if (toolProcessingStatus === 'paused') {
                 currentTurnStatus = 'paused'; // Signal pause to the caller
+            } else if (toolProcessingStatus === 'cancelled') {
+                currentTurnStatus = 'cancelled'; // Signal cancellation to the caller
             } else if (toolProcessingStatus === 'completed') {
                  // If tools completed, the caller might loop
                 currentTurnStatus = 'completed_with_tools';
@@ -540,25 +614,32 @@ function App() {
 
     } catch (error) {
       console.error('Error in executeChatTurn:', error);
-      // Ensure placeholder is replaced or an error message is added
-      setMessages(prev => {
-          const newMessages = [...prev];
-          const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
-          const errorMsg = { role: 'assistant', content: `Error: ${error.message}`, isStreaming: false };
-            if (idx !== -1) {
-                newMessages[idx] = errorMsg;
-            } else {
-                // If streaming never started, add the error message
-                newMessages.push(errorMsg);
-            }
-          return newMessages;
-      });
-      currentTurnStatus = 'error';
+      
+      // Check if this was a cancellation
+      if (error.message === 'CANCELLED') {
+        console.log('Chat turn was cancelled');
+        currentTurnStatus = 'cancelled';
+      } else {
+        // Ensure placeholder is replaced or an error message is added
+        setMessages(prev => {
+            const newMessages = [...prev];
+            const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
+            const errorMsg = { role: 'assistant', content: `Error: ${error.message}`, isStreaming: false };
+              if (idx !== -1) {
+                  newMessages[idx] = errorMsg;
+              } else {
+                  // If streaming never started, add the error message
+                  newMessages.push(errorMsg);
+              }
+            return newMessages;
+        });
+        currentTurnStatus = 'error';
+      }
     }
 
     // Return the outcome of the turn
     return {
-        status: currentTurnStatus, // 'completed_no_tools', 'completed_with_tools', 'paused', 'error'
+        status: currentTurnStatus, // 'completed_no_tools', 'completed_with_tools', 'paused', 'error', 'cancelled'
         assistantMessage: turnAssistantMessage,
         toolResponseMessages: turnToolResponses,
     };
@@ -571,6 +652,9 @@ function App() {
     const hasContent = isStructuredContent ? content.some(part => (part.type === 'text' && part.text.trim()) || part.type === 'image_url') : content.trim();
 
     if (!hasContent) return;
+
+    // Reset cancellation flag for new message
+    cancelledRef.current = false;
 
     // Format the user message based on content type
     const userMessage = {
@@ -596,6 +680,10 @@ function App() {
                  // Pause initiated by executeChatTurn/processToolCalls
                  // Loading state remains true, waiting for modal interaction
                  break; // Exit the loop
+            } else if (status === 'cancelled') {
+                 // Stream was cancelled by user
+                 console.log('Conversation cancelled by user');
+                 break;
             } else if (status === 'error') {
                  // Error occurred, stop the loop
                   break;
@@ -652,6 +740,13 @@ function App() {
           return;
       }
 
+      // Check if operation was cancelled
+      if (cancelledRef.current) {
+          console.log('Resume chat flow cancelled by user');
+          setLoading(false);
+          return;
+      }
+
       const { currentMessages, finalAssistantMessage, accumulatedResponses } = pausedChatState;
       setPausedChatState(null); // Clear the paused state
 
@@ -673,13 +768,35 @@ function App() {
 
       // Process remaining tools
       for (const nextToolCall of remainingTools) {
+        // Check if operation was cancelled
+        if (cancelledRef.current) {
+            console.log('Tool execution cancelled by user during resume');
+            setLoading(false);
+            return;
+        }
+
         const toolName = nextToolCall.function.name;
         const approvalStatus = getToolApprovalStatus(toolName);
 
         if (approvalStatus === 'always' || approvalStatus === 'yolo') {
             console.log(`Resuming: Tool '${toolName}' automatically approved (${approvalStatus}). Executing...`);
             try {
+                // Check before executing
+                if (cancelledRef.current) {
+                    console.log('Tool execution cancelled by user before executing');
+                    setLoading(false);
+                    return;
+                }
+                
                 const resultMsg = await executeToolCall(nextToolCall);
+                
+                // Check after executing
+                if (cancelledRef.current) {
+                    console.log('Tool execution cancelled by user after tool completed');
+                    setLoading(false);
+                    return;
+                }
+                
                 allResponsesForTurn.push(resultMsg);
                 setMessages(prev => [...prev, resultMsg]); // Update UI immediately
             } catch (error) {
@@ -737,9 +854,12 @@ function App() {
                   setLoading(false);
               }
         } catch (error) {
-            console.error("Error during resumed chat turn:", error);
-            setMessages(prev => [...prev, { role: 'assistant', content: `Error after resuming: ${error.message}` }]);
-            setLoading(false); // Stop loading on error
+            // Check if this was a cancellation
+            if (error.message !== 'CANCELLED') {
+                console.error("Error during resumed chat turn:", error);
+                setMessages(prev => [...prev, { role: 'assistant', content: `Error after resuming: ${error.message}` }]);
+            }
+            setLoading(false); // Stop loading on error or cancellation
         }
       }
   };
@@ -910,7 +1030,18 @@ function App() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => setMessages([])}
+                onClick={() => {
+                  // Stop any ongoing streams before clearing
+                  if (loading) {
+                    console.log('Stopping streams before starting new chat...');
+                    window.electron.stopChatStream();
+                    setLoading(false);
+                    // Clear any pending tool approval state
+                    setPendingApprovalCall(null);
+                    setPausedChatState(null);
+                  }
+                  setMessages([]);
+                }}
                 className="text-foreground hover:text-foreground"
               >
                 <MessageSquare className="h-4 w-4 mr-2" />
@@ -949,6 +1080,7 @@ function App() {
                 <div className="w-full max-w-2xl">
                   <ChatInput
                     onSendMessage={handleSendMessage}
+                    onStopGeneration={handleStopGeneration}
                     loading={loading}
                     visionSupported={visionSupported}
                     models={models}
@@ -974,6 +1106,7 @@ function App() {
                 <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur pt-6">
                   <ChatInput
                     onSendMessage={handleSendMessage}
+                    onStopGeneration={handleStopGeneration}
                     loading={loading}
                     visionSupported={visionSupported}
                     models={models}
