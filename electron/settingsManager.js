@@ -22,6 +22,7 @@ function loadSettings() {
             popupEnabled: true,
             customCompletionUrl: '',
             toolOutputLimit: 8000,
+            maxConversations: 50,
             customApiBaseUrl: '',
             customApiBaseUrlEnabled: false,
             customModels: {}
@@ -41,6 +42,7 @@ function loadSettings() {
         popupEnabled: true,
         customCompletionUrl: '',
         toolOutputLimit: 8000,
+        maxConversations: 50,
         customApiBaseUrl: '',
         customApiBaseUrlEnabled: false,
         customModels: {}
@@ -81,6 +83,7 @@ function loadSettings() {
             }
             settings.customCompletionUrl = settings.customCompletionUrl || defaultSettings.customCompletionUrl;
             settings.toolOutputLimit = settings.toolOutputLimit ?? defaultSettings.toolOutputLimit;
+            settings.maxConversations = settings.maxConversations ?? defaultSettings.maxConversations;
             settings.customApiBaseUrl = settings.customApiBaseUrl || defaultSettings.customApiBaseUrl;
             settings.customApiBaseUrlEnabled = settings.customApiBaseUrlEnabled ?? defaultSettings.customApiBaseUrlEnabled;
             settings.customModels = settings.customModels || defaultSettings.customModels;
