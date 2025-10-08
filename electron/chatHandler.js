@@ -277,10 +277,11 @@ function handleStreamCompletion(event, accumulatedData, finishReason) {
     });
 }
 
-// Executes stream with retry logic for tool_use_failed errors
+// Executes stream with retry logic for tool_use_failed errors and tool call validation errors
 async function executeStreamWithRetry(groq, chatCompletionParams, event, streamId) {
-    const MAX_TOOL_USE_RETRIES = 3;
+    const MAX_TOOL_USE_RETRIES = 25;
     let retryCount = 0;
+    const baseTemperature = chatCompletionParams.temperature;
 
     while (retryCount <= MAX_TOOL_USE_RETRIES) {
         try {
@@ -342,14 +343,57 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 return;
             }
 
-            const isToolUseFailedError = error?.error?.code === 'tool_use_failed' || error?.message?.includes('tool_use_failed');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const isToolUseFailedError = error?.error?.code === 'tool_use_failed' || errorMessage.includes('tool_use_failed');
+            const isToolValidationError = errorMessage.includes('Tool call validation failed') || 
+                                         errorMessage.includes('was not in request.tools');
 
-            if (isToolUseFailedError && retryCount < MAX_TOOL_USE_RETRIES) {
+            if ((isToolUseFailedError || isToolValidationError) && retryCount < MAX_TOOL_USE_RETRIES) {
                 retryCount++;
+                console.log(`Retrying due to tool error (attempt ${retryCount}/${MAX_TOOL_USE_RETRIES}): ${errorMessage}`);
+                
+                // Bump temperature by 0.05 per retry
+                chatCompletionParams.temperature = baseTemperature + (retryCount * 0.05);
+                console.log(`Adjusted temperature to ${chatCompletionParams.temperature} for retry ${retryCount}`);
+                
+                // Notify client of retry attempt
+                event.sender.send('chat-stream-retry', {
+                    attempt: retryCount,
+                    maxAttempts: MAX_TOOL_USE_RETRIES,
+                    error: errorMessage,
+                    newTemperature: chatCompletionParams.temperature
+                });
+                
+                // Append error to the last user message in the request (not in UI)
+                const lastUserMessageIndex = chatCompletionParams.messages.map((m, i) => ({ role: m.role, index: i }))
+                    .filter(m => m.role === 'user')
+                    .pop()?.index;
+                
+                if (lastUserMessageIndex !== undefined) {
+                    const lastUserMsg = chatCompletionParams.messages[lastUserMessageIndex];
+                    
+                    // Handle both string and array content formats
+                    if (typeof lastUserMsg.content === 'string') {
+                        lastUserMsg.content += `\n\n[Note: Previous attempt failed with error: ${errorMessage}]`;
+                    } else if (Array.isArray(lastUserMsg.content)) {
+                        // Find the last text part or add one
+                        const lastTextPart = lastUserMsg.content.filter(p => p.type === 'text').pop();
+                        if (lastTextPart) {
+                            lastTextPart.text += `\n\n[Note: Previous attempt failed with error: ${errorMessage}]`;
+                        } else {
+                            lastUserMsg.content.push({
+                                type: 'text',
+                                text: `\n[Note: Previous attempt failed with error: ${errorMessage}]`
+                            });
+                        }
+                    }
+                }
+                
+                // Wait 0.5 seconds before retrying
+                await new Promise(resolve => setTimeout(resolve, 500));
                 continue;
             }
 
-            const errorMessage = error instanceof Error ? error.message : String(error);
             activeStreams.delete(streamId);
             event.sender.send('chat-stream-error', {
                 error: `Failed to get chat completion: ${errorMessage}`,

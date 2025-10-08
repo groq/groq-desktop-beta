@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('chat-stream-cancelled', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-cancelled', callback);
       },
+      onRetry: (callback) => {
+        ipcRenderer.on('chat-stream-retry', (_, data) => callback(data));
+        return () => ipcRenderer.removeListener('chat-stream-retry', callback);
+      },
       cleanup: () => {
         ipcRenderer.removeAllListeners('chat-stream-start');
         ipcRenderer.removeAllListeners('chat-stream-content');
@@ -56,6 +60,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('chat-stream-complete');
         ipcRenderer.removeAllListeners('chat-stream-error');
         ipcRenderer.removeAllListeners('chat-stream-cancelled');
+        ipcRenderer.removeAllListeners('chat-stream-retry');
       }
     };
   },

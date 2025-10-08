@@ -600,6 +600,12 @@ function App() {
                 currentTurnStatus = 'cancelled';
                 reject(new Error('CANCELLED'));
             });
+
+            streamHandler.onRetry(({ attempt, maxAttempts, error, newTemperature }) => {
+                console.log(`🔄 Retry attempt ${attempt}/${maxAttempts}:`);
+                console.log(`  Error: ${error}`);
+                console.log(`  New temperature: ${newTemperature}`);
+            });
         });
 
         // Clean up stream handlers
