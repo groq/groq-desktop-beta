@@ -116,12 +116,22 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
         allTools.push(...builtInTools);
     }
 
+    // Check if the model contains "compound" in its name
+    const isCompoundModel = modelToUse.toLowerCase().includes('compound');
+    
+    // Don't pass tools to compound models
+    const shouldIncludeTools = allTools.length > 0 && !isCompoundModel;
+    
+    if (isCompoundModel && allTools.length > 0) {
+        console.log(`Skipping tools for compound model: ${modelToUse}`);
+    }
+
     const apiParams = {
         messages: [{ role: "system", content: systemPrompt }, ...prunedMessages],
         model: modelToUse,
         temperature: settings.temperature ?? 0.7,
         top_p: settings.top_p ?? 0.95,
-        ...(allTools.length > 0 && { tools: allTools, tool_choice: "auto" }),
+        ...(shouldIncludeTools && { tools: allTools, tool_choice: "auto" }),
         stream: true
     };
 

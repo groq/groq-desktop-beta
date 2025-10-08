@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ToolCall from './ToolCall';
 import MarkdownRenderer from './MarkdownRenderer';
 
@@ -7,6 +7,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   const [showReasoning, setShowReasoning] = useState(false);
   const [showExecutedTools, setShowExecutedTools] = useState(false);
   const [collapsedOutputs, setCollapsedOutputs] = useState(new Set()); // Track which tool outputs are collapsed
+  const wasStreamingRef = useRef(false);
+  
   const isUser = role === 'user';
   const hasReasoning = (reasoning || liveReasoning) && !isUser;
   const hasExecutedTools = (executed_tools?.length > 0 || liveExecutedTools?.length > 0) && !isUser;
@@ -15,6 +17,15 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   // Get current reasoning and tools (live or final)
   const currentReasoning = liveReasoning || reasoning;
   const currentTools = liveExecutedTools?.length > 0 ? liveExecutedTools : executed_tools;
+  
+  // Auto-collapse when streaming finishes
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreamingMessage) {
+      // Streaming just finished, auto-collapse
+      setShowReasoning(false);
+    }
+    wasStreamingRef.current = isStreamingMessage;
+  }, [isStreamingMessage]);
 
   console.log("Message", message.content);
 
@@ -129,8 +140,18 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
             
             {/* Reasoning content */}
             {(showReasoning || (isStreamingMessage && liveReasoning)) && currentReasoning && (
-              <div className="p-3 bg-blue-50 rounded-md text-md ">
-                <div className="whitespace-pre-wrap break-words text-blue-900">
+              <div 
+                className={`p-3 bg-blue-50 rounded-md text-md transition-all duration-200 ${
+                  isStreamingMessage && liveReasoning && !showReasoning 
+                    ? '' // No additional height constraints for streaming mode
+                    : 'max-h-[600px] overflow-y-auto' // Full height with scroll when manually opened
+                }`}
+              >
+                <div className={`whitespace-pre-wrap break-words text-blue-900 ${
+                  isStreamingMessage && liveReasoning && !showReasoning 
+                    ? 'line-clamp-4' // Exactly 4 lines during streaming
+                    : '' // No clamp when manually opened
+                }`}>
                   <MarkdownRenderer
                     content={currentReasoning
                       .replace(/<tool[^>]*>([\s\S]*?)<\/tool>/gi, '**Tool call:**\n```$1```')

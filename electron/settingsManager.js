@@ -72,11 +72,8 @@ function loadSettings() {
             settings.customSystemPrompt = settings.customSystemPrompt || defaultSettings.customSystemPrompt;
             settings.popupEnabled = settings.popupEnabled ?? defaultSettings.popupEnabled;
 
-            // Log API key status for debugging (without revealing the actual key)
-            if (settings.GROQ_API_KEY && settings.GROQ_API_KEY !== "<replace me>") {
-                const keyPreview = settings.GROQ_API_KEY.substring(0, 8) + '...';
-                console.log(`GROQ_API_KEY configured: ${keyPreview}`);
-            } else {
+            // Log API key status only if not configured (for debugging)
+            if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
                 console.warn('GROQ_API_KEY not configured - autocomplete will not work');
             }
             settings.customCompletionUrl = settings.customCompletionUrl || defaultSettings.customCompletionUrl;
@@ -94,11 +91,8 @@ function loadSettings() {
             fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
             console.log('Settings file created with defaults at:', settingsPath);
 
-            // Log API key status for new installations
-            if (defaultSettings.GROQ_API_KEY && defaultSettings.GROQ_API_KEY !== "<replace me>") {
-                const keyPreview = defaultSettings.GROQ_API_KEY.substring(0, 8) + '...';
-                console.log(`GROQ_API_KEY configured from environment: ${keyPreview}`);
-            } else {
+            // Log API key status only if not configured (for new installations)
+            if (!defaultSettings.GROQ_API_KEY || defaultSettings.GROQ_API_KEY === "<replace me>") {
                 console.warn('GROQ_API_KEY not configured - please set it in .env file or settings');
             }
 

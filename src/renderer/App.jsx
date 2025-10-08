@@ -74,6 +74,11 @@ function App() {
   const [isToolsPanelOpen, setIsToolsPanelOpen] = useState(false);
   const [mcpServersStatus, setMcpServersStatus] = useState({ loading: false, message: "" });
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const userScrollingRef = useRef(false); // Immediate ref for preventing race conditions
+  const scrollThrottleRef = useRef(null); // For throttling scroll during streaming
+  const rafRef = useRef(null); // For requestAnimationFrame during streaming
   // Store the list of models from capabilities keys
   // const models = Object.keys(MODEL_CONTEXT_SIZES).filter(key => key !== 'default'); // Old way
   const [modelConfigs, setModelConfigs] = useState({}); // State for model configurations
@@ -284,13 +289,123 @@ function App() {
     // Depend on initialLoadComplete as well to trigger after load finishes
   }, [selectedModel, initialLoadComplete, models]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Check if user is at the bottom of the scroll area (within 100px threshold)
+  const isAtBottom = () => {
+    if (!messagesContainerRef.current) return true;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const threshold = 100;
+    return scrollHeight - scrollTop - clientHeight < threshold;
   };
 
+  const scrollToBottom = (instant = false) => {
+    // Double-check before scrolling to prevent race conditions
+    if (!userScrollingRef.current) {
+      // Use instant scroll during streaming to avoid bouncy behavior
+      // Use smooth scroll for stable content (like when user sends a message)
+      messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
+    }
+  };
+
+  // Handle scroll events to detect when user manually scrolls
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const atBottom = isAtBottom();
+      if (atBottom) {
+        // User is at bottom, resume auto-scroll
+        userScrollingRef.current = false;
+        setIsUserScrolling(false);
+      } else if (!atBottom) {
+        // User scrolled up, disable auto-scroll
+        userScrollingRef.current = true;
+        setIsUserScrolling(true);
+      }
+    };
+
+    // Detect scroll wheel/touch intent immediately (before scroll position changes)
+    const handleWheel = (e) => {
+      // If user is scrolling up (negative deltaY), mark as user scrolling
+      if (e.deltaY < 0) {
+        userScrollingRef.current = true;
+        setIsUserScrolling(true);
+      }
+      // If scrolling down and already at bottom, ensure auto-scroll is enabled
+      else if (e.deltaY > 0 && isAtBottom()) {
+        userScrollingRef.current = false;
+        setIsUserScrolling(false);
+      }
+    };
+
+    const handleTouchStart = () => {
+      // When user touches to scroll, check if they're at bottom
+      if (!isAtBottom()) {
+        userScrollingRef.current = true;
+        setIsUserScrolling(true);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('wheel', handleWheel, { passive: true });
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+    };
+  }, []);
+
+  // Auto-scroll to bottom when messages change, but only if user hasn't scrolled up
+  useEffect(() => {
+    // Check both state and ref for maximum responsiveness
+    if (!isUserScrolling && !userScrollingRef.current) {
+      // Check if any message is actively streaming
+      const isStreaming = messages.some(msg => msg.isStreaming === true);
+      
+      if (isStreaming) {
+        // Use requestAnimationFrame for smooth scrolling aligned with browser rendering
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+        }
+        if (scrollThrottleRef.current) {
+          clearTimeout(scrollThrottleRef.current);
+        }
+        
+        // Throttle with rAF for optimal performance
+        scrollThrottleRef.current = setTimeout(() => {
+          rafRef.current = requestAnimationFrame(() => {
+            scrollToBottom(true); // instant scroll
+            rafRef.current = null;
+          });
+          scrollThrottleRef.current = null;
+        }, 50);
+      } else {
+        // Clear any pending throttled scroll and rAF
+        if (scrollThrottleRef.current) {
+          clearTimeout(scrollThrottleRef.current);
+          scrollThrottleRef.current = null;
+        }
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+        // Non-streaming: scroll smoothly immediately
+        scrollToBottom(false);
+      }
+    }
+    
+    // Cleanup function
+    return () => {
+      if (scrollThrottleRef.current) {
+        clearTimeout(scrollThrottleRef.current);
+      }
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [messages, isUserScrolling]);
 
   const executeToolCall = async (toolCall) => {
     try {
@@ -679,6 +794,10 @@ function App() {
 
     // Reset cancellation flag for new message
     cancelledRef.current = false;
+    
+    // Reset user scrolling flag so new messages auto-scroll
+    userScrollingRef.current = false;
+    setIsUserScrolling(false);
 
     // Format the user message based on content type
     const userMessage = {
@@ -1118,7 +1237,11 @@ function App() {
             ) : (
               /* Chat View */
               <div className="flex flex-col h-full min-h-0">
-                <div className="flex-1 overflow-y-auto mb-6 min-h-0">
+                <div 
+                  ref={messagesContainerRef} 
+                  className="flex-1 overflow-y-auto mb-6 min-h-0"
+                  style={{ willChange: 'scroll-position' }}
+                >
                   <MessageList 
                     messages={messages} 
                     onToolCallExecute={executeToolCall} 
