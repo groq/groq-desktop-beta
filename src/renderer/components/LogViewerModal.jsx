@@ -111,10 +111,10 @@ function LogViewerModal({ serverId, transportType, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]"> {/* Higher z-index than ToolsPanel */}
-      <div className="bg-gray-900 w-full max-w-4xl max-h-[90vh] rounded-lg shadow-xl overflow-hidden flex flex-col border border-gray-700">
+      <div className="bg-card w-full max-w-4xl max-h-[90vh] rounded-lg shadow-xl overflow-hidden flex flex-col border border-border">
         {/* Header */}
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
-          <h2 className="text-lg font-semibold text-white">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-muted">
+          <h2 className="text-lg font-semibold text-foreground">
             Logs for Server: <span className="font-mono text-primary">{serverId}</span>
           </h2>
           <button
