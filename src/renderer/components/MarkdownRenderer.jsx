@@ -105,7 +105,7 @@ const components = {
             <table className="table-auto w-full mb-1" {...props} />
           ),
           thead: ({ node: _, ...props }) => (
-            <thead className="bg-gray-100 dark:bg-shallow text-left" {...props} />
+            <thead className="bg-muted text-left" {...props} />
           ),
           tbody: ({ node: _, ...props }) => <tbody {...props} />,
           ol: ({ node: _, children, ...props }) => {
