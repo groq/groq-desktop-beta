@@ -43,11 +43,11 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
 
   const messageClasses = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
   // Apply background only for user messages
-  const bubbleStyle = isUser ? 'bg-gray-200' : ''; // No background for assistant/system
+  const bubbleStyle = isUser ? 'bg-muted' : ''; // No background for assistant/system
   const bubbleClasses = isUser
     ? `relative overflow-x-auto px-4 py-3 rounded-lg max-w-xl max-h-[500px] overflow-y-auto cursor-pointer ${bubbleStyle}`
     : `relative overflow-x-auto w-full`; // Assistant bubbles full-width, no background
-  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-black' : 'text-black'} break-words`; // Keep text white for both, use break-words
+  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-foreground' : 'text-foreground'} break-words`; // Keep text themed for both, use break-words
 
   const toggleReasoning = () => setShowReasoning(!showReasoning);
   const toggleExecutedTools = () => setShowExecutedTools(!showExecutedTools);
@@ -170,7 +170,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                 {currentTools.map((tool, index) => {
                   const isLive = liveExecutedTools?.length > 0;
                   return (
-                    <div key={`tool-${tool.index || index}`} className={`p-3 rounded-md text-sm border ${isLive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <div key={`tool-${tool.index || index}`} className={`p-3 rounded-md text-sm border ${isLive ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-muted border-border'}`}>
                       <div className={`font-semibold mb-2 ${isLive ? 'text-green-800' : 'text-gray-800'}`}>
                         {tool.type === 'python' ? '🐍 Python Code' : `🔧 ${tool.type || 'Tool'}`}
                         {tool.name && (
@@ -192,7 +192,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                       {tool.arguments && (
                         <div className="mb-2">
                           <div className={`text-xs mb-1 ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Code:</div>
-                          <pre className={`p-2 rounded overflow-x-auto text-xs ${isLive ? 'bg-green-100 text-green-900' : 'bg-gray-100 text-gray-900'}`}>
+                          <pre className={`p-2 rounded overflow-x-auto text-xs ${isLive ? 'bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-100' : 'bg-secondary text-secondary-foreground'}`}>
                             {typeof tool.arguments === 'string' ? 
                               (tool.arguments.startsWith('{') ? 
                                 (() => {
@@ -220,8 +220,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                               // Show output directly for 10 lines or fewer
                               return (
                                 <div>
-                                  <div className={`text-xs mb-1 ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Output:</div>
-                                  <pre className={`bg-white p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200' : 'text-gray-900 border-gray-200'}`}>
+                                  <div className={`text-xs mb-1 ${isLive ? 'text-green-700 dark:text-green-300' : 'text-muted-foreground'}`}>Output:</div>
+                                  <pre className={`bg-background p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200 dark:text-green-100 dark:border-green-800' : 'text-foreground border-border'}`}>
                                     {tool.output}
                                   </pre>
                                 </div>
@@ -232,22 +232,22 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                             return (
                               <div>
                                 <div className="flex items-center justify-between mb-1">
-                                  <div className={`text-xs ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Output:</div>
+                                  <div className={`text-xs ${isLive ? 'text-green-700 dark:text-green-300' : 'text-muted-foreground'}`}>Output:</div>
                                   <button
                                     onClick={() => toggleOutputCollapse(tool.index || index)}
                                     className={`text-xs px-2 py-0.5 rounded hover:bg-opacity-80 transition-colors ${
-                                      isLive ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                                      isLive ? 'bg-green-200 text-green-800 hover:bg-green-300 dark:bg-green-900/30 dark:text-green-100 dark:hover:bg-green-900/50' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                                     }`}
                                   >
                                     {isOutputCollapsed(tool.index || index) ? 'Show' : 'Hide'}
                                   </button>
                                 </div>
                                 {isOutputCollapsed(tool.index || index) ? (
-                                  <div className={`bg-white p-2 rounded text-xs border ${isLive ? 'text-green-700 border-green-200' : 'text-gray-700 border-gray-200'} italic`}>
+                                  <div className={`bg-background p-2 rounded text-xs border ${isLive ? 'text-green-700 border-green-200 dark:text-green-300 dark:border-green-800' : 'text-muted-foreground border-border'} italic`}>
                                     Output available (click Show to expand)
                                   </div>
                                 ) : (
-                                  <pre className={`bg-white p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200' : 'text-gray-900 border-gray-200'}`}>
+                                  <pre className={`bg-background p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200 dark:text-green-100 dark:border-green-800' : 'text-foreground border-border'}`}>
                                     {tool.output}
                                   </pre>
                                 )}
