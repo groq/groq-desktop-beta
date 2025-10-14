@@ -33,7 +33,7 @@ function ToolApprovalModal({ toolCall, onApprove }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 w-full max-w-xl rounded-lg shadow-xl overflow-hidden flex flex-col border border-gray-700">
+      <div className="bg-card w-full max-w-xl rounded-lg shadow-xl overflow-hidden flex flex-col border border-border">
         <div className="p-4 border-b border-gray-700">
           <h2 className="text-lg font-semibold text-gray-100 flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -46,7 +46,7 @@ function ToolApprovalModal({ toolCall, onApprove }) {
         <div className="p-5 overflow-y-auto max-h-[60vh] space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1 uppercase tracking-wider">Tool Name:</label>
-            <div className="bg-gray-900 p-3 rounded text-gray-200 font-mono text-sm border border-gray-700">
+            <div className="bg-secondary p-3 rounded text-secondary-foreground font-mono text-sm border border-border">
               {toolName}
             </div>
           </div>
@@ -73,7 +73,7 @@ function ToolApprovalModal({ toolCall, onApprove }) {
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-700 bg-gray-700/30 flex flex-wrap gap-3 justify-end">
+        <div className="p-4 border-t border-border bg-muted/30 flex flex-wrap gap-3 justify-end">
            <button
             onClick={() => handleChoice('once')}
             className={buttonClasses.once}
