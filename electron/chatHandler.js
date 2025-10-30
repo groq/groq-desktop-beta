@@ -49,13 +49,20 @@ function prepareTools(discoveredTools) {
 
 function cleanMessages(messages) {
     // Clean and prepare messages for the API
-    // 1. Remove internal fields like 'reasoning', 'isStreaming'
+    // 1. Remove internal fields like 'reasoning', 'isStreaming', 'reasoningDuration', etc.
     // 2. Ensure correct content format (user: array, assistant: string, tool: string)
     return messages.map(msg => {
         // Create a clean copy, then delete unwanted properties
         const cleanMsg = { ...msg };
         delete cleanMsg.reasoning;
         delete cleanMsg.isStreaming;
+        delete cleanMsg.reasoningDuration;
+        delete cleanMsg.reasoningSummaries;
+        delete cleanMsg.liveReasoning;
+        delete cleanMsg.liveExecutedTools;
+        delete cleanMsg.executed_tools;
+        delete cleanMsg.reasoningStartTime;
+        delete cleanMsg.usage;
 
         // Ensure user content is array format for vision support
         if (cleanMsg.role === 'user') {
@@ -91,7 +98,21 @@ function cleanMessages(messages) {
 }
 
 function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContextSizes) {
-    let systemPrompt = "You are a helpful assistant capable of using tools. Use tools only when necessary and relevant to the user's request. Format responses using Markdown.";
+    // Get current date/time with timezone
+    const now = new Date();
+    const dateTimeString = now.toLocaleString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        timeZoneName: 'long',
+        hour12: false
+    });
+    
+    let systemPrompt = `You are a helpful assistant capable of using tools. Use tools only when necessary and relevant to the user's request. Format responses using Markdown.\n\nCurrent date and time: ${dateTimeString}`;
     if (settings.customSystemPrompt && settings.customSystemPrompt.trim()) {
         systemPrompt += `\n\n${settings.customSystemPrompt.trim()}`;
     }
@@ -397,20 +418,21 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
     const baseTemperature = chatCompletionParams.temperature;
 
     while (retryCount <= MAX_TOOL_USE_RETRIES) {
+        let accumulatedData = {
+            content: "",
+            toolCalls: [],
+            reasoning: "",
+            executedTools: [],
+            isFirstChunk: true,
+            streamId: null,
+            reasoningSummaries: [],
+            lastSummarizedTime: 0,
+            summaryCount: 0,
+            summaryInterval: null,
+            usage: null
+        };
+        
         try {
-            const accumulatedData = {
-                content: "",
-                toolCalls: [],
-                reasoning: "",
-                executedTools: [],
-                isFirstChunk: true,
-                streamId: null,
-                reasoningSummaries: [],
-                lastSummarizedTime: 0,
-                summaryCount: 0,
-                summaryInterval: null,
-                usage: null
-            };
 
             // Check if stream was cancelled before starting
             const streamInfo = activeStreams.get(streamId);

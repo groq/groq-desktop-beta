@@ -266,7 +266,10 @@ function ChatInput({
 
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
-			handleSubmit(e);
+			// Prevent submission during loading
+			if (!loading) {
+				handleSubmit(e);
+			}
 		}
 	};
 
@@ -387,7 +390,6 @@ function ChatInput({
 							minRows={1}
 							maxRows={10}
 							cacheMeasurements={true}
-							disabled={loading}
 						/>
 						{/* Drag overlay */}
 						{isDragOver && (
