@@ -9,7 +9,7 @@ module.exports = {
       center: true,
       padding: "2rem",
       screens: {
-        "2xl": "1400px",
+        "2xl": "1600px",
       },
     },
     extend: {
@@ -61,10 +61,15 @@ module.exports = {
       },
       animation: {
         'spin': 'spin 1s linear infinite',
+        'shimmer': 'shimmer var(--duration) infinite',
       },
       keyframes: {
         spin: {
           'to': { transform: 'rotate(360deg)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '200% center' },
+          '100%': { backgroundPosition: '-200% center' },
         },
       },
     },

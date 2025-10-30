@@ -83,6 +83,8 @@ function App() {
   // const models = Object.keys(MODEL_CONTEXT_SIZES).filter(key => key !== 'default'); // Old way
   const [modelConfigs, setModelConfigs] = useState({}); // State for model configurations
   const [models, setModels] = useState([]); // State for model list
+  const [modelFilter, setModelFilter] = useState(''); // State for model filter setting
+  const [modelFilterExclude, setModelFilterExclude] = useState(''); // State for model filter exclude setting
 
   // State for current model's vision capability
   const [visionSupported, setVisionSupported] = useState(false);
@@ -109,13 +111,175 @@ function App() {
       return prev.slice(0, prev.length - 1);
     });
   };
+
+  // Handle reloading from a specific message (remove all messages after it and resend)
+  const handleReloadFromMessage = async (messageIndex) => {
+    // Find the last user message at or before the messageIndex
+    let lastUserMessageIndex = -1;
+    for (let i = messageIndex; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserMessageIndex === -1) {
+      console.warn('No user message found to reload from');
+      return;
+    }
+
+    // Get messages up to and including the last user message
+    const messagesToKeep = messages.slice(0, lastUserMessageIndex + 1);
+    
+    // Reset messages to only include up to the last user message
+    setMessages(messagesToKeep);
+
+    // Reset cancellation flag
+    cancelledRef.current = false;
+    
+    // Reset user scrolling flag
+    userScrollingRef.current = false;
+    setIsUserScrolling(false);
+
+    setLoading(true);
+
+    let currentApiMessages = messagesToKeep;
+    let conversationStatus = 'processing';
+
+    try {
+        while (conversationStatus === 'processing' || conversationStatus === 'completed_with_tools') {
+            const { status, assistantMessage, toolResponseMessages } = await executeChatTurn(currentApiMessages);
+
+            conversationStatus = status;
+
+            if (status === 'paused') {
+                break;
+            } else if (status === 'cancelled') {
+                console.log('Conversation cancelled by user');
+                break;
+            } else if (status === 'error') {
+                break;
+            } else if (status === 'completed_with_tools') {
+                if (assistantMessage && toolResponseMessages.length > 0) {
+                    const formattedToolResponses = toolResponseMessages.map(msg => ({
+                        role: 'tool',
+                        content: msg.content,
+                        tool_call_id: msg.tool_call_id
+                    }));
+                    currentApiMessages = [
+                        ...currentApiMessages,
+                        {
+                          role: assistantMessage.role,
+                          content: assistantMessage.content,
+                          tool_calls: assistantMessage.tool_calls
+                        },
+                        ...formattedToolResponses
+                    ];
+                } else {
+                    console.warn("Status 'completed_with_tools' but no assistant message or tool responses found.");
+                    conversationStatus = 'error';
+                    break;
+                }
+            } else if (status === 'completed_no_tools') {
+                break;
+            }
+        }
+    } catch (error) {
+        console.error('Error in handleReloadFromMessage:', error);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
+        conversationStatus = 'error';
+    } finally {
+        if (conversationStatus !== 'paused') {
+            setLoading(false);
+        }
+    }
+  };
   
   // Models list derived from capabilities keys
   // const models = Object.keys(MODEL_CAPABILITIES).filter(key => key !== 'default');
 
+  // Helper function to filter models based on modelFilter setting
+  const filterModels = (modelList, filterText, excludeText, configs) => {
+    let filteredModels = modelList;
+
+    // First, apply inclusion filter if specified
+    if (filterText && filterText.trim()) {
+      // Split filter text into lines and filter out empty lines
+      const filterTerms = filterText
+        .split('\n')
+        .map(term => term.trim())
+        .filter(term => term.length > 0);
+
+      if (filterTerms.length > 0) {
+        // Helper to get display name for a model
+        const getDisplayName = (modelId) => {
+          const modelInfo = configs[modelId];
+          if (modelInfo && modelInfo.displayName) {
+            return modelInfo.displayName;
+          }
+          return modelId;
+        };
+
+        // Filter models that match any filter term (case-insensitive)
+        filteredModels = modelList.filter(modelId => {
+          const displayName = getDisplayName(modelId).toLowerCase();
+          const modelIdLower = modelId.toLowerCase();
+          
+          // Check if any filter term matches either the model ID or display name
+          return filterTerms.some(term => {
+            const termLower = term.toLowerCase();
+            return modelIdLower.includes(termLower) || displayName.includes(termLower);
+          });
+        });
+      }
+    }
+
+    // Then, apply exclude filter (applies regardless of inclusion filter)
+    if (excludeText && excludeText.trim()) {
+      // Split exclude text into lines and filter out empty lines
+      const excludeTerms = excludeText
+        .split('\n')
+        .map(term => term.trim())
+        .filter(term => term.length > 0);
+
+      if (excludeTerms.length > 0) {
+        // Helper to get display name for a model
+        const getDisplayName = (modelId) => {
+          const modelInfo = configs[modelId];
+          if (modelInfo && modelInfo.displayName) {
+            return modelInfo.displayName;
+          }
+          return modelId;
+        };
+
+        // Filter out models that match any exclude term (case-insensitive)
+        filteredModels = filteredModels.filter(modelId => {
+          const displayName = getDisplayName(modelId).toLowerCase();
+          const modelIdLower = modelId.toLowerCase();
+          
+          // Check if any exclude term matches either the model ID or display name
+          const matchesExclude = excludeTerms.some(term => {
+            const termLower = term.toLowerCase();
+            return modelIdLower.includes(termLower) || displayName.includes(termLower);
+          });
+          
+          // Return false (exclude) if it matches, true (keep) if it doesn't
+          return !matchesExclude;
+        });
+      }
+    }
+
+    return filteredModels;
+  };
+
   // Sort models alphabetically by display name for consistent ordering
+  // and apply model filter if configured
   const sortedModels = useMemo(() => {
-    return [...models].sort((a, b) => {
+    // First apply the filters (inclusion and exclude)
+    const filteredModels = filterModels(models, modelFilter, modelFilterExclude, modelConfigs);
+    
+    // Then sort the filtered models
+    return filteredModels.sort((a, b) => {
       // Get display names from modelConfigs
       const getDisplayName = (modelId) => {
         const modelInfo = modelConfigs[modelId];
@@ -129,7 +293,7 @@ function App() {
       const nameB = getDisplayName(b).toLowerCase();
       return nameA.localeCompare(nameB);
     });
-  }, [models, modelConfigs]);
+  }, [models, modelConfigs, modelFilter, modelFilterExclude]);
 
   // Function to update the server status display - moved outside useEffect
   const updateServerStatus = (tools, settings) => {
@@ -195,6 +359,9 @@ function App() {
 
         // THEN Load settings
         const settings = await window.electron.getSettings(); // Await settings
+        // Load model filter settings
+        setModelFilter(settings.modelFilter || '');
+        setModelFilterExclude(settings.modelFilterExclude || '');
         let effectiveModel = availableModels.length > 0 ? availableModels[0] : 'default'; // Default fallback if no models or no setting
 
         if (settings && settings.model) {
@@ -255,6 +422,24 @@ function App() {
 
     loadInitialData();
   }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Reload model filter when window gains focus (in case settings changed)
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const settings = await window.electron.getSettings();
+        setModelFilter(settings.modelFilter || '');
+        setModelFilterExclude(settings.modelFilterExclude || '');
+      } catch (error) {
+        console.error('Error reloading model filter:', error);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // Save model selection to settings when it changes, ONLY after initial load
   useEffect(() => {
@@ -326,16 +511,9 @@ function App() {
 
     // Detect scroll wheel/touch intent immediately (before scroll position changes)
     const handleWheel = (e) => {
-      // If user is scrolling up (negative deltaY), mark as user scrolling
-      if (e.deltaY < 0) {
-        userScrollingRef.current = true;
-        setIsUserScrolling(true);
-      }
-      // If scrolling down and already at bottom, ensure auto-scroll is enabled
-      else if (e.deltaY > 0 && isAtBottom()) {
-        userScrollingRef.current = false;
-        setIsUserScrolling(false);
-      }
+      // ANY wheel event immediately cancels auto-scrolling to prevent fighting
+      userScrollingRef.current = true;
+      setIsUserScrolling(true);
     };
 
     const handleTouchStart = () => {
@@ -542,7 +720,8 @@ function App() {
         const assistantPlaceholder = {
             role: 'assistant',
             content: '',
-            isStreaming: true
+            isStreaming: true,
+            reasoningSummaries: []
         };
         setMessages(prev => [...prev, assistantPlaceholder]);
 
@@ -557,7 +736,10 @@ function App() {
             reasoning: undefined,
             executed_tools: undefined,
             liveReasoning: '',
-            liveExecutedTools: []
+            liveExecutedTools: [],
+            reasoningSummaries: [],
+            reasoningStartTime: null,
+            reasoningDuration: null
         };
 
         // Setup event handlers for streaming
@@ -565,11 +747,24 @@ function App() {
 
         streamHandler.onContent(({ content }) => {
             finalAssistantData.content += content;
+            
+            // If this is the first content token and we have reasoning, mark reasoning as complete
+            if (finalAssistantData.content === content && finalAssistantData.reasoningStartTime && !finalAssistantData.reasoningDuration) {
+                finalAssistantData.reasoningDuration = Math.round((Date.now() - finalAssistantData.reasoningStartTime) / 1000);
+                console.log('[Frontend] First content token received, reasoning complete. Duration:', finalAssistantData.reasoningDuration);
+            }
+            
             setMessages(prev => {
                 const newMessages = [...prev];
                 const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
                 if (idx !== -1) {
-                    newMessages[idx] = { ...newMessages[idx], content: finalAssistantData.content };
+                    newMessages[idx] = { 
+                        ...newMessages[idx], 
+                        content: finalAssistantData.content,
+                        reasoningDuration: finalAssistantData.reasoningDuration,
+                        liveReasoning: finalAssistantData.liveReasoning,
+                        reasoningSummaries: [...finalAssistantData.reasoningSummaries]
+                    };
                 }
                 return newMessages;
             });
@@ -589,12 +784,52 @@ function App() {
 
         // Handle compound-beta reasoning streaming
         streamHandler.onReasoning(({ reasoning, accumulated }) => {
+            // Track when reasoning starts and add initial "Thinking" placeholder
+            if (!finalAssistantData.reasoningStartTime) {
+                finalAssistantData.reasoningStartTime = Date.now();
+                console.log('[Frontend] Reasoning started, added "Thinking" placeholder');
+                
+                // Add initial "Thinking" placeholder if no summaries yet
+                if (finalAssistantData.reasoningSummaries.length === 0) {
+                    finalAssistantData.reasoningSummaries.push({ index: 0, summary: 'Thinking', isPlaceholder: true });
+                }
+            }
+            
             finalAssistantData.liveReasoning = accumulated;
             setMessages(prev => {
                 const newMessages = [...prev];
                 const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
                 if (idx !== -1) {
-                    newMessages[idx] = { ...newMessages[idx], liveReasoning: accumulated };
+                    newMessages[idx] = { 
+                        ...newMessages[idx], 
+                        liveReasoning: accumulated,
+                        reasoningSummaries: [...finalAssistantData.reasoningSummaries]
+                    };
+                }
+                return newMessages;
+            });
+        });
+
+        // Handle reasoning summaries
+        streamHandler.onReasoningSummary(({ streamId, summaryIndex, summary }) => {
+            console.log(`[Frontend] Received summary ${summaryIndex}: "${summary}"`);
+            
+            // Remove the placeholder "Thinking" when first real summary arrives
+            if (finalAssistantData.reasoningSummaries.length > 0 && 
+                finalAssistantData.reasoningSummaries[0].isPlaceholder) {
+                finalAssistantData.reasoningSummaries.shift();
+                console.log(`[Frontend] Replaced "Thinking" placeholder`);
+            }
+            
+            finalAssistantData.reasoningSummaries.push({ index: summaryIndex, summary });
+            setMessages(prev => {
+                const newMessages = [...prev];
+                const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
+                if (idx !== -1) {
+                    newMessages[idx] = { 
+                        ...newMessages[idx], 
+                        reasoningSummaries: [...finalAssistantData.reasoningSummaries] 
+                    };
                 }
                 return newMessages;
             });
@@ -645,6 +880,12 @@ function App() {
         // Handle stream completion
         await new Promise((resolve, reject) => {
             streamHandler.onComplete((data) => {
+                // Use existing duration if already set, otherwise calculate it now
+                let reasoningDuration = finalAssistantData.reasoningDuration;
+                if (!reasoningDuration && finalAssistantData.reasoningStartTime && data.reasoning) {
+                    reasoningDuration = Math.round((Date.now() - finalAssistantData.reasoningStartTime) / 1000);
+                }
+                
                 finalAssistantData = {
                     role: 'assistant',
                     content: data.content || '',
@@ -653,7 +894,11 @@ function App() {
                     executed_tools: data.executed_tools,
                     // Clear live streaming data on completion
                     liveReasoning: undefined,
-                    liveExecutedTools: undefined
+                    liveExecutedTools: undefined,
+                    // Keep the reasoning summaries
+                    reasoningSummaries: finalAssistantData.reasoningSummaries,
+                    reasoningDuration: reasoningDuration,
+                    usage: data.usage
                 };
                 turnAssistantMessage = finalAssistantData; // Store the completed message
 
@@ -1160,7 +1405,7 @@ function App() {
             
             {/* Status Badge */}
             {mcpTools.length > 0 && (
-              <Badge variant="secondary" className="ml-4">
+              <Badge variant="secondary" className="ml-4 bg-[#E9E9DF] hover:bg-[#E9E9DF]">
                 <Zap className="w-3 h-3 mr-1" />
                 {mcpTools.length} tools
               </Badge>
@@ -1205,8 +1450,8 @@ function App() {
       {/* TODO: Make the scroll area the entire width instead of the container while keeping the input at the bottom*/}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className="container py-8 h-full">
-            <div className="max-w-4xl mx-auto h-full">
+          <div className="max-w-[1600px] mx-auto py-8 px-8 h-full">
+            <div className="h-full">
             {messages.length === 0 ? (
               /* Welcome Screen */
               <div className="flex flex-col items-center justify-center h-full space-y-8">
@@ -1215,7 +1460,7 @@ function App() {
                     Build Fast
                   </h1>
                   <p className="text-xl text-muted-foreground max-w-2xl">
-                    Try the speed of Groq...
+                    Try the speed of Groq…
                   </p>
                 </div>
 
@@ -1245,7 +1490,10 @@ function App() {
                   <MessageList 
                     messages={messages} 
                     onToolCallExecute={executeToolCall} 
-                    onRemoveLastMessage={handleRemoveLastMessage} 
+                    onRemoveLastMessage={handleRemoveLastMessage}
+                    onReloadFromMessage={handleReloadFromMessage}
+                    loading={loading}
+                    onActionsVisible={scrollToBottom}
                   />
                   <div ref={messagesEndRef} />
                 </div>

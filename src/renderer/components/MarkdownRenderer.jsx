@@ -40,6 +40,7 @@ const components = {
                 language={match[1]}
                 PreTag="div"
                 className="rounded-xl"
+                customStyle={{ fontSize: '0.875rem' }} // Make code blocks smaller (text-sm equivalent)
                 {...props}
               >
                 {String(children).replace(/\n$/, '')}
@@ -51,32 +52,32 @@ const components = {
             );
           },
           h1: ({ node: _, children, ...props }) => (
-            <h1 className="text-3xl font-bold mb-4 mt-10" {...props}>
+            <h1 className="text-xl font-bold mb-4 mt-3" {...props}>
               {children}
             </h1>
           ),
           h2: ({ node: _, children, ...props }) => (
-            <h2 className="text-2xl font-semibold mb-3 mt-9" {...props}>
+            <h2 className="text-lg font-semibold mb-3 mt-3" {...props}>
               {children}
             </h2>
           ),
           h3: ({ node: _, children, ...props }) => (
-            <h3 className="text-xl font-medium mb-3 mt-8" {...props}>
+            <h3 className="text-base font-medium mb-3 mt-8" {...props}>
               {children}
             </h3>
           ),
           h4: ({ node: _, children, ...props }) => (
-            <h4 className="text-lg font-medium mb-2 mt-7" {...props}>
+            <h4 className="text-sm font-medium mb-2 mt-7" {...props}>
               {children}
             </h4>
           ),
           h5: ({ node: _, children, ...props }) => (
-            <h5 className="text-base font-medium mb-2 mt-7" {...props}>
+            <h5 className="text-sm font-medium mb-2 mt-7" {...props}>
               {children}
             </h5>
           ),
           h6: ({ node: _, children, ...props }) => (
-            <h6 className="text-sm font-medium mb-1 mt-6" {...props}>
+            <h6 className="text-xs font-medium mb-1 mt-6" {...props}>
               {children}
             </h6>
           ),
@@ -84,7 +85,7 @@ const components = {
           td: ({ node: _, children, ...props }) => {
             return (
               <td
-                className="border-r border-gray-200 p-2 font-normal first:border-l text-left"
+                className="border-r border-gray-200 p-2 font-normal first:border-l text-left text-sm"
                 {...props}
               >
                 {children}
@@ -94,7 +95,7 @@ const components = {
           th: ({ node: _, children, ...props }) => {
             return (
               <th
-                className="border-r border-gray-200 p-2 font-medium first:border-l border-t text-left"
+                className="border-r border-gray-200 p-2 font-medium first:border-l border-t text-left text-sm"
                 {...props}
               >
                 {children}
@@ -105,7 +106,7 @@ const components = {
             <table className="table-auto w-full mb-1" {...props} />
           ),
           thead: ({ node: _, ...props }) => (
-            <thead className="bg-gray-100 dark:bg-shallow text-left" {...props} />
+            <thead className="text-left" {...props} />
           ),
           tbody: ({ node: _, ...props }) => <tbody {...props} />,
           ol: ({ node: _, children, ...props }) => {
@@ -121,7 +122,7 @@ const components = {
           ul: ({ node: _, children, ...props }) => {
             return (
               <ul
-                className="ml-0 mb-1"
+                className="ml-0 mb-1 list-disc"
                 {...props}
               >
                 {children}
@@ -131,7 +132,7 @@ const components = {
           li: ({ node: _, ...props }) => <li className="ml-10 mb-2" {...props} />,
           p({ children, ...props }) {
             return (
-              <p className="text-left mb-3" {...props}>
+              <p className="text-left mb-3 text-sm" {...props}>
                 {children}
               </p>
             );
@@ -191,7 +192,7 @@ function MarkdownRenderer({ content, disableMath = false }) {
   const rehypePlugins = disableMath ? [] : [rehypeKatex];
 
   return (
-    <div className="font-inter">
+    <div className="font-inter text-sm">
       <ReactMarkdown
         components={components}
         remarkPlugins={remarkPlugins} // Enable GitHub Flavored Markdown, conditionally enable math

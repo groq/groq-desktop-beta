@@ -231,11 +231,11 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <Card className="w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <div className="space-y-1">
-            <CardTitle className="text-2xl">Available Tools</CardTitle>
-            <CardDescription>
+      <Card className="w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+          <div className="space-y-0.5">
+            <CardTitle className="text-xl">Available Tools</CardTitle>
+            <CardDescription className="text-xs">
               {tools.length} tools available across {Object.keys(toolsByServer).length} connected servers
             </CardDescription>
           </div>
@@ -243,7 +243,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
             variant="ghost" 
             size="icon"
             onClick={onClose}
-            className="shrink-0"
+            className="shrink-0 h-8 w-8"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -251,62 +251,64 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
           </Button>
         </CardHeader>
         
-        <CardContent className="flex-1 overflow-y-auto">
+        <CardContent className="flex-1 overflow-y-auto px-4 py-3">
           {/* Show configured servers section */}
           {configuredServers.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4">Configured MCP Servers</h3>
-              <Card className="mb-4">
+            <div className="mb-4">
+              <h3 className="text-base font-semibold mb-2">Configured MCP Servers</h3>
+              <Card className="mb-3">
                 <CardContent className="p-0">
                   {configuredServers.map((server, index) => (
                     <div key={server.id} className={cn(
-                      "p-4 flex justify-between items-center",
+                      "p-3 flex justify-between items-start gap-3",
                       index !== configuredServers.length - 1 && "border-b"
                     )}>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{server.id}</span>
-                          <Badge variant={serverStatuses[server.id] === 'connected' ? 'default' : 'secondary'}>
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{server.id}</span>
+                          <Badge variant={serverStatuses[server.id] === 'connected' ? 'default' : 'secondary'} className="text-xs">
                             {serverStatuses[server.id] === 'connected' ? 'Connected' : 'Disconnected'}
                           </Badge>
-                          <div className="flex items-center gap-2 text-sm">
+                          <div className="flex items-center gap-1.5 text-xs">
                             <span className="text-muted-foreground">Auto-start:</span>
                             <Switch
                               checked={!disabledServers.includes(server.id)}
                               onChange={() => handleToggleAutoStart(server.id, disabledServers.includes(server.id))}
                               id={`autostart-${server.id}`}
+                              size="sm"
                             />
                           </div>
                         </div>
-                        <div className="space-y-1 text-sm text-muted-foreground">
+                        <div className="space-y-0.5 text-xs text-muted-foreground">
                           {server.transport === 'sse' ? (
                             <>
                               <div><span className="font-mono">Type: SSE</span></div>
-                              <div><span className="font-mono">URL: {server.url || 'N/A'}</span></div>
+                              <div><span className="font-mono break-all">URL: {server.url || 'N/A'}</span></div>
                             </>
                           ) : server.transport === 'streamableHttp' ? (
                             <>
                               <div><span className="font-mono">Type: Streamable HTTP</span></div>
-                              <div><span className="font-mono">URL: {server.url || 'N/A'}</span></div>
+                              <div><span className="font-mono break-all">URL: {server.url || 'N/A'}</span></div>
                             </>
                           ) : (
                             <>
                               <div><span className="font-mono">Type: Stdio</span></div>
                               <div><span className="font-mono">Command: {server.command || 'N/A'}</span></div>
                               {server.args && server.args.length > 0 && (
-                                <div><span className="font-mono">Args: {server.args.join(' ')}</span></div>
+                                <div><span className="font-mono break-all">Args: {server.args.join(' ')}</span></div>
                               )}
                             </>
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5 shrink-0">
                         {serverStatuses[server.id] === 'connected' && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setViewingLogsForServer({ id: server.id, transport: server.transport })}
                             disabled={actionInProgress === server.id}
+                            className="h-7 px-2 text-xs"
                           >
                             Logs
                           </Button>
@@ -317,6 +319,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                             size="sm"
                             onClick={() => handleDisconnect(server.id)}
                             disabled={actionInProgress === server.id}
+                            className="h-7 px-2 text-xs"
                           >
                             {actionInProgress === server.id ? 'Disconnecting...' : 'Disconnect'}
                           </Button>
@@ -327,7 +330,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                               size="sm"
                               onClick={() => handleAuthorizeServer(server.id)}
                               disabled={actionInProgress === server.id}
-                              className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                              className="h-7 px-2 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-50"
                             >
                               {actionInProgress === server.id ? 'Authorizing...' : 'Authorize'}
                             </Button>
@@ -337,6 +340,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                               size="sm"
                               onClick={() => handleReconnect(server.id)}
                               disabled={actionInProgress === server.id}
+                              className="h-7 px-2 text-xs"
                             >
                               {actionInProgress === server.id ? 'Connecting...' : 'Reconnect'}
                             </Button>
@@ -347,7 +351,7 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                   ))}
                 </CardContent>
               </Card>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-2">
                 Toggle auto-start to control which servers connect automatically when the application launches.
                 You can also manage server configurations in settings.
               </p>
@@ -355,22 +359,22 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
           )}
         
           {/* Available tools section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Available Tools by Server</h3>
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold">Available Tools by Server</h3>
             {Object.keys(toolsByServer).length === 0 ? (
               <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-muted-foreground">No tools available. All configured servers are disconnected.</p>
+                <CardContent className="text-center py-4 px-3">
+                  <p className="text-sm text-muted-foreground">No tools available. All configured servers are disconnected.</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {Object.entries(toolsByServer).map(([serverId, serverTools]) => (
                   <Card key={serverId}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-base">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 pt-3">
+                      <CardTitle className="text-sm font-semibold">
                         Server: {serverId}
-                        <Badge variant="outline" className="ml-2">
+                        <Badge variant="outline" className="ml-2 text-xs">
                           {serverTools.length} tools
                         </Badge>
                       </CardTitle>
@@ -386,37 +390,37 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
                       )}
                     </CardHeader>
                     
-                    <CardContent className="space-y-3 pt-2">
+                    <CardContent className="space-y-1.5 pt-2 px-3 pb-3">
                       {serverTools.map((tool) => (
                         <Card key={tool.name} className="overflow-hidden">
                           <div 
-                            className="p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                            className="p-2.5 cursor-pointer hover:bg-accent/50 transition-colors"
                             onClick={() => toggleToolExpand(tool.name)}
                           >
-                            <div className="flex justify-between items-start">
-                              <div className="space-y-1 flex-1">
-                                <h4 className="font-medium">{tool.name}</h4>
-                                <p className="text-sm text-muted-foreground">
-                                  {tool.description?.substring(0, 100)}
-                                  {tool.description?.length > 100 ? '...' : ''}
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="space-y-0.5 flex-1 min-w-0">
+                                <h4 className="font-medium text-sm">{tool.name}</h4>
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {tool.description?.substring(0, 80)}
+                                  {tool.description?.length > 80 ? '...' : ''}
                                 </p>
                               </div>
-                              <Button variant="ghost" size="sm" className="shrink-0 ml-2">
+                              <Button variant="ghost" size="sm" className="shrink-0 h-6 w-6 p-0">
                                 {expandedTools[tool.name] ? '▼' : '▶'}
                               </Button>
                             </div>
                           </div>
                           
                           {expandedTools[tool.name] && (
-                            <div className="border-t p-4 space-y-4 bg-muted/50">
+                            <div className="border-t p-2.5 space-y-2 bg-muted/50">
                               <div>
-                                <h5 className="font-medium text-sm mb-2">Full Description:</h5>
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{tool.description}</p>
+                                <h5 className="font-medium text-xs mb-1">Full Description:</h5>
+                                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{tool.description}</p>
                               </div>
                               
                               <div>
-                                <h5 className="font-medium text-sm mb-2">Input Schema:</h5>
-                                <pre className="bg-background p-3 rounded-md overflow-x-auto text-xs border">
+                                <h5 className="font-medium text-xs mb-1">Input Schema:</h5>
+                                <pre className="bg-background p-2 rounded-md overflow-x-auto text-xs border">
                                   {JSON.stringify(tool.input_schema, null, 2)}
                                 </pre>
                               </div>
@@ -432,8 +436,8 @@ function ToolsPanel({ tools = [], onClose, onDisconnectServer, onReconnectServer
           </div>
         </CardContent>
         
-        <div className="flex items-center justify-end gap-2 p-6 pt-0">
-          <Button onClick={onClose} className="w-full">
+        <div className="flex items-center justify-end gap-2 px-4 pb-3 pt-2">
+          <Button onClick={onClose} className="w-full" size="sm">
             Close
           </Button>
         </div>

@@ -299,10 +299,10 @@ function ChatInput({
 	return (
     <div 
 			className={cn(
-				"flex flex-col gap-4 border rounded-2xl shadow-lg w-full p-4 bg-card/50 backdrop-blur-sm transition-all duration-200",
+				"flex flex-col gap-4 border border-[#CBCDC2] rounded-2xl w-full p-3 bg-[#E9E9DF] backdrop-blur-sm",
 				isDragOver 
-					? "border-primary border-2 bg-primary/5 shadow-xl" 
-					: "border-border/50"
+					? "border-primary border-2 bg-primary/5 transition-all duration-200" 
+					: ""
 			)}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
@@ -375,10 +375,7 @@ function ChatInput({
 							onHeightChange={handleHeightChange}
 							placeholder={isDragOver ? "Drop files here..." : "Ask Groq anything..."}
 							className={cn(
-								"w-full px-4 py-3 bg-background/80 backdrop-blur-sm resize-none border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring/50 transition-all duration-200",
-								isDragOver 
-									? "border-primary/50 bg-primary/5" 
-									: "border-border/50",
+								"w-full px-4 py-3 bg-transparent resize-none border-0 rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none",
 								// Control overflow based on whether we're at max height
 								isAtMaxHeight ? "overflow-y-auto" : "overflow-y-hidden"
 							)}
@@ -432,7 +429,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={() => fileInputRef.current?.click()}
-								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
+								className="text-muted-foreground hover:text-foreground hover:bg-white/40 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
 								title={visionSupported ? "Upload file or image (max 5)" : "Upload files (images require vision-capable model)"}
 								disabled={loading}
 							>
@@ -457,7 +454,7 @@ function ChatInput({
 								variant="ghost"
 								size="sm"
 								onClick={onOpenMcpTools}
-								className="text-muted-foreground hover:text-foreground transition-colors rounded-xl"
+								className="text-muted-foreground hover:text-foreground hover:bg-white/40 hover:shadow-sm transition-all duration-200 rounded-xl px-3 py-1.5"
 								title="Open MCP tools panel"
 								disabled={loading}
 							>

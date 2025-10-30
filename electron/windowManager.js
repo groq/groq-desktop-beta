@@ -3,20 +3,30 @@ const path = require('path');
 let mainWindow; // Store the main window instance
 
 function createWindow(screen, BrowserWindow) {
-  const { height, width } = screen.getPrimaryDisplay().workAreaSize;
+  const display = screen.getPrimaryDisplay();
+  const { height, width } = display.workAreaSize;
+  const bounds = display.bounds;
+
+  const windowWidth = Math.min(1600, width);
+  const windowHeight = height;
+
+  // Calculate center position
+  // Center horizontally in the full screen, vertically in the work area
+  const x = bounds.x + Math.round((bounds.width - windowWidth) / 2);
+  const y = bounds.y + Math.round((bounds.height - height) / 2);
 
   mainWindow = new BrowserWindow({
-    width: Math.min(1400, width),
-    height: height,
+    width: windowWidth,
+    height: windowHeight,
+    x: x,
+    y: y,
+    maxWidth: 1600,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js') // Assumes preload.js is in the same directory
     }
   });
-
-  // Maximize window by default
-  mainWindow.maximize();
 
   // Determine URL based on environment
   const startUrl = process.env.NODE_ENV === 'development'

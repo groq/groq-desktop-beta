@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 60 13% 94%;
     --foreground: 224 71.4% 4.1%;
     --card: 0 0% 100%;
     --card-foreground: 224 71.4% 4.1%;
@@ -78,6 +78,11 @@
 
   .markdown-content p:not(:last-child) {
     @apply mb-2;
+  }
+  
+  /* Override for reasoning content - no paragraph margins */
+  .reasoning-content .markdown-content p:not(:last-child) {
+    @apply mb-0;
   }
 
   .markdown-content h1 {
@@ -218,6 +223,15 @@ select#model-select option {
   }
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
 /* Reasoning section styles */
 .reasoning-section {
   @apply mt-2 text-sm;
@@ -227,8 +241,12 @@ select#model-select option {
   @apply text-xs text-muted-foreground bg-transparent border-none underline cursor-pointer px-1 py-0.5 mt-1 rounded transition-all duration-200 hover:text-primary hover:bg-primary/10;
 }
 
-.reasoning-content {
-  @apply mt-2 p-2 border-t border-border bg-muted/50 rounded-b text-xs whitespace-pre-wrap;
+.reasoning-content .markdown-content p {
+  margin-bottom: 0 !important;
+}
+
+.reasoning-content .markdown-content p:not(:last-child) {
+  margin-bottom: 0 !important;
 }
 
 /* Additional model selector styling for enhanced appearance */

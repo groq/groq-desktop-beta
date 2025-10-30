@@ -145,10 +145,15 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
 }
 
 // Processes individual stream chunks for compound-beta and regular models
-function processStreamChunk(chunk, event, accumulatedData) {
+function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
     if (!chunk.choices?.[0]) return;
 
     const { delta } = chunk.choices[0];
+    
+    // Capture usage data if present (usually in the final chunk)
+    if (chunk.x_groq?.usage) {
+        accumulatedData.usage = chunk.x_groq.usage;
+    }
 
     if (accumulatedData.isFirstChunk) {
         accumulatedData.streamId = chunk.id;
@@ -162,6 +167,13 @@ function processStreamChunk(chunk, event, accumulatedData) {
     if (delta?.content) {
         accumulatedData.content += delta.content;
         event.sender.send('chat-stream-content', { content: delta.content });
+        
+        // If this is the first content token after reasoning, clear the summary interval
+        if (accumulatedData.content === delta.content && accumulatedData.summaryInterval && accumulatedData.reasoning.length > 0) {
+            clearInterval(accumulatedData.summaryInterval);
+            accumulatedData.summaryInterval = null;
+            console.log('[Backend] First content token received, cleared summary interval');
+        }
     }
 
     // Reasoning streaming - supports both delta.reasoning and delta.reasoning_content
@@ -169,10 +181,38 @@ function processStreamChunk(chunk, event, accumulatedData) {
     const reasoningDelta = delta?.reasoning || delta?.reasoning_content;
     if (reasoningDelta) {
         accumulatedData.reasoning += reasoningDelta;
+        
+        // Send reasoning to frontend so it knows reasoning is happening
         event.sender.send('chat-stream-reasoning', {
             reasoning: reasoningDelta,
             accumulated: accumulatedData.reasoning
         });
+        
+        // Start interval timer on first reasoning chunk
+        if (!accumulatedData.summaryInterval) {
+            console.log('[Backend] First reasoning chunk, starting summary interval');
+            accumulatedData.lastSummarizedTime = Date.now();
+            
+            // Set up interval to check every 2 seconds
+            accumulatedData.summaryInterval = setInterval(() => {
+                const now = Date.now();
+                const timeSinceLastSummary = now - accumulatedData.lastSummarizedTime;
+                
+                if (timeSinceLastSummary >= 2000 && accumulatedData.reasoning.length > 0) {
+                    accumulatedData.lastSummarizedTime = now;
+                    accumulatedData.summaryCount++;
+                    
+                    console.log(`[Backend] Interval triggered summary ${accumulatedData.summaryCount}, reasoning length: ${accumulatedData.reasoning.length}`);
+                    
+                    // Get the last 300 words for summarization
+                    const last300Words = getLastNWords(accumulatedData.reasoning, 300);
+                    
+                    // Trigger summarization asynchronously (non-blocking)
+                    summarizeReasoningChunk(groq, last300Words, event, streamId, accumulatedData.summaryCount)
+                        .catch(err => console.error('[Backend] Error in background summarization:', err));
+                }
+            }, 2000);
+        }
     }
 
     // Compound-beta executed tools streaming - handles progressive tool execution
@@ -277,14 +317,77 @@ function processStreamChunk(chunk, event, accumulatedData) {
 }
 
 function handleStreamCompletion(event, accumulatedData, finishReason) {
+    // Clear the summary interval if it exists
+    if (accumulatedData.summaryInterval) {
+        clearInterval(accumulatedData.summaryInterval);
+        console.log('[Backend] Cleared summary interval on completion');
+    }
+    
     event.sender.send('chat-stream-complete', {
         content: accumulatedData.content,
         role: "assistant",
         tool_calls: accumulatedData.toolCalls.length > 0 ? accumulatedData.toolCalls : undefined,
         reasoning: accumulatedData.reasoning || undefined,
         executed_tools: accumulatedData.executedTools.length > 0 ? accumulatedData.executedTools : undefined,
-        finish_reason: finishReason
+        finish_reason: finishReason,
+        usage: accumulatedData.usage
     });
+}
+
+// Helper function to count words in text
+function countWords(text) {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+}
+
+// Helper function to get last N words from text
+function getLastNWords(text, n) {
+    const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+    return words.slice(-n).join(' ');
+}
+
+// Summarize reasoning chunk using llama-3.1-8b-instant (non-blocking)
+async function summarizeReasoningChunk(groq, reasoningText, event, streamId, summaryIndex) {
+    try {
+        console.log(`[Backend Summary ${summaryIndex}] Starting summarization for stream ${streamId}, text length: ${reasoningText.length}`);
+        const response = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You must respond with ONLY 3-5 plain words. No markdown, no formatting, no punctuation, no explanations. Just 3-5 words describing the activity.'
+                },
+                {
+                    role: 'user',
+                    content: `What activity is happening here in 3-5 words:\n\n${reasoningText}\n\nRespond with ONLY 3-5 plain words:`
+                }
+            ],
+            model: 'llama-3.1-8b-instant',
+            temperature: 0.3,
+            max_tokens: 10,
+            stream: false
+        });
+        
+        const summary = response.choices[0]?.message?.content?.trim() || 'Processing thoughts';
+        console.log(`[Backend Summary ${summaryIndex}] Completed: "${summary}"`);
+        console.log(`[Backend Summary ${summaryIndex}] Sending to frontend via chat-stream-reasoning-summary`);
+        
+        // Send the summary to the frontend with streamId and index
+        event.sender.send('chat-stream-reasoning-summary', {
+            streamId,
+            summaryIndex,
+            summary
+        });
+        
+        return summary;
+    } catch (error) {
+        console.error(`[Backend Summary ${summaryIndex}] Error summarizing:`, error.message);
+        const fallbackSummary = 'Analyzing reasoning';
+        event.sender.send('chat-stream-reasoning-summary', {
+            streamId,
+            summaryIndex,
+            summary: fallbackSummary
+        });
+        return fallbackSummary;
+    }
 }
 
 // Executes stream with retry logic for tool_use_failed errors and tool call validation errors
@@ -301,7 +404,12 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 reasoning: "",
                 executedTools: [],
                 isFirstChunk: true,
-                streamId: null
+                streamId: null,
+                reasoningSummaries: [],
+                lastSummarizedTime: 0,
+                summaryCount: 0,
+                summaryInterval: null,
+                usage: null
             };
 
             // Check if stream was cancelled before starting
@@ -325,12 +433,17 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 const currentStreamInfo = activeStreams.get(streamId);
                 if (!currentStreamInfo || currentStreamInfo.cancelled) {
                     console.log(`Stream ${streamId} was cancelled during processing`);
+                    // Clear summary interval if it exists
+                    if (accumulatedData.summaryInterval) {
+                        clearInterval(accumulatedData.summaryInterval);
+                        console.log('[Backend] Cleared summary interval on cancellation');
+                    }
                     event.sender.send('chat-stream-cancelled', { streamId });
                     activeStreams.delete(streamId);
                     return;
                 }
 
-                const finishReason = processStreamChunk(chunk, event, accumulatedData);
+                const finishReason = processStreamChunk(chunk, event, accumulatedData, groq, streamId);
 
                 if (finishReason) {
                     handleStreamCompletion(event, accumulatedData, finishReason);
@@ -339,6 +452,12 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 }
             }
 
+            // Clear summary interval before exiting
+            if (accumulatedData.summaryInterval) {
+                clearInterval(accumulatedData.summaryInterval);
+                console.log('[Backend] Cleared summary interval on unexpected end');
+            }
+            
             activeStreams.delete(streamId);
             event.sender.send('chat-stream-error', { error: "Stream ended unexpectedly." });
             return;
@@ -348,6 +467,11 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
             const streamInfo = activeStreams.get(streamId);
             if (streamInfo && streamInfo.cancelled) {
                 console.log(`Stream ${streamId} error due to cancellation`);
+                // Clear summary interval
+                if (accumulatedData.summaryInterval) {
+                    clearInterval(accumulatedData.summaryInterval);
+                    console.log('[Backend] Cleared summary interval on error cancellation');
+                }
                 event.sender.send('chat-stream-cancelled', { streamId });
                 activeStreams.delete(streamId);
                 return;
@@ -404,6 +528,11 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 continue;
             }
 
+            // Clear summary interval
+            if (accumulatedData.summaryInterval) {
+                clearInterval(accumulatedData.summaryInterval);
+            }
+            
             activeStreams.delete(streamId);
             event.sender.send('chat-stream-error', {
                 error: `Failed to get chat completion: ${errorMessage}`,

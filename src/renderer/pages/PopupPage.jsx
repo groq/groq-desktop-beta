@@ -22,6 +22,80 @@ const ContextPill = ({ title, onRemove }) => (
   </Badge>
 );
 
+// Helper function to filter models based on modelFilter setting
+const filterModels = (modelList, filterText, excludeText, configs) => {
+  let filteredModels = modelList;
+
+  // First, apply inclusion filter if specified
+  if (filterText && filterText.trim()) {
+    // Split filter text into lines and filter out empty lines
+    const filterTerms = filterText
+      .split('\n')
+      .map(term => term.trim())
+      .filter(term => term.length > 0);
+
+    if (filterTerms.length > 0) {
+      // Helper to get display name for a model
+      const getDisplayName = (modelId) => {
+        const modelInfo = configs[modelId];
+        if (modelInfo && modelInfo.displayName) {
+          return modelInfo.displayName;
+        }
+        return modelId;
+      };
+
+      // Filter models that match any filter term (case-insensitive)
+      filteredModels = modelList.filter(modelId => {
+        const displayName = getDisplayName(modelId).toLowerCase();
+        const modelIdLower = modelId.toLowerCase();
+        
+        // Check if any filter term matches either the model ID or display name
+        return filterTerms.some(term => {
+          const termLower = term.toLowerCase();
+          return modelIdLower.includes(termLower) || displayName.includes(termLower);
+        });
+      });
+    }
+  }
+
+  // Then, apply exclude filter (applies regardless of inclusion filter)
+  if (excludeText && excludeText.trim()) {
+    // Split exclude text into lines and filter out empty lines
+    const excludeTerms = excludeText
+      .split('\n')
+      .map(term => term.trim())
+      .filter(term => term.length > 0);
+
+    if (excludeTerms.length > 0) {
+      // Helper to get display name for a model
+      const getDisplayName = (modelId) => {
+        const modelInfo = configs[modelId];
+        if (modelInfo && modelInfo.displayName) {
+          return modelInfo.displayName;
+        }
+        return modelId;
+      };
+
+      // Filter out models that match any exclude term (case-insensitive)
+      filteredModels = filteredModels.filter(modelId => {
+        const displayName = getDisplayName(modelId).toLowerCase();
+        const modelIdLower = modelId.toLowerCase();
+        
+        // Check if any exclude term matches either the model ID or display name
+        const matchesExclude = excludeTerms.some(term => {
+          const termLower = term.toLowerCase();
+          return modelIdLower.includes(termLower) || displayName.includes(termLower);
+        });
+        
+        // Return false (exclude) if it matches, true (keep) if it doesn't
+        return !matchesExclude;
+      });
+    }
+  }
+
+  return filteredModels;
+};
+
 const CustomModelSelector = ({ selectedModel, models, onModelChange, isCompact = false, modelConfigs = {} }) => {
   const getDisplayName = (model) => {
     const modelInfo = modelConfigs[model];
@@ -76,6 +150,8 @@ const PopupPage = () => {
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
   const [models, setModels] = useState([]);
   const [modelConfigs, setModelConfigs] = useState({});
+  const [modelFilter, setModelFilter] = useState(''); // State for model filter setting
+  const [modelFilterExclude, setModelFilterExclude] = useState(''); // State for model filter exclude setting
   const [showContext, setShowContext] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [files, setFiles] = useState([]);
@@ -166,12 +242,24 @@ const PopupPage = () => {
       setModelConfigs(configs);
       const availableModels = Object.keys(configs).filter(key => key !== 'default');
       
-      // Sort models alphabetically by display name
-      const sortedModels = availableModels.sort((a, b) => {
-        const getDisplayName = (modelId) => {
-          const modelInfo = configs[modelId];
-          return modelInfo?.displayName || modelId;
-        };
+      // Load settings to get model filter
+      const settings = await window.electron.getSettings();
+      const filterText = settings.modelFilter || '';
+      const excludeText = settings.modelFilterExclude || '';
+      setModelFilter(filterText);
+      setModelFilterExclude(excludeText);
+      
+      // Apply filter and sort models alphabetically by display name
+      const getDisplayName = (modelId) => {
+        const modelInfo = configs[modelId];
+        return modelInfo?.displayName || modelId;
+      };
+      
+      // Filter models first (inclusion and exclude)
+      const filteredModels = filterModels(availableModels, filterText, excludeText, configs);
+      
+      // Then sort
+      const sortedModels = filteredModels.sort((a, b) => {
         const nameA = getDisplayName(a).toLowerCase();
         const nameB = getDisplayName(b).toLowerCase();
         return nameA.localeCompare(nameB);

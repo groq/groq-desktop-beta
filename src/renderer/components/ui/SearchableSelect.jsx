@@ -129,7 +129,7 @@ export function SearchableSelect({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "flex h-8 w-full items-center justify-between rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors",
+          "flex h-8 w-full items-center justify-between rounded-xl border border-[#CBCDC2] bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors",
           isOpen && "ring-2 ring-ring ring-offset-2"
         )}
         aria-haspopup="listbox"

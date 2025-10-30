@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('chat-stream-reasoning', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-reasoning', callback);
       },
+      onReasoningSummary: (callback) => {
+        ipcRenderer.on('chat-stream-reasoning-summary', (_, data) => callback(data));
+        return () => ipcRenderer.removeListener('chat-stream-reasoning-summary', callback);
+      },
       onToolExecution: (callback) => {
         ipcRenderer.on('chat-stream-tool-execution', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-tool-execution', callback);
@@ -56,6 +60,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('chat-stream-content');
         ipcRenderer.removeAllListeners('chat-stream-tool-calls');
         ipcRenderer.removeAllListeners('chat-stream-reasoning');
+        ipcRenderer.removeAllListeners('chat-stream-reasoning-summary');
         ipcRenderer.removeAllListeners('chat-stream-tool-execution');
         ipcRenderer.removeAllListeners('chat-stream-complete');
         ipcRenderer.removeAllListeners('chat-stream-error');

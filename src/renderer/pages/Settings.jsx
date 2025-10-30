@@ -28,7 +28,9 @@ function Settings() {
     builtInTools: {
       codeInterpreter: false,
       browserSearch: false
-    }
+    },
+    modelFilter: '',
+    modelFilterExclude: ''
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -98,7 +100,9 @@ function Settings() {
                 codeInterpreter: false,
                 browserSearch: false
             },
-            reasoning_effort: 'medium'
+            reasoning_effort: 'medium',
+            modelFilter: '',
+            modelFilterExclude: ''
         }));
       }
     };
@@ -944,7 +948,7 @@ function Settings() {
                       id="temperature"
                       name="temperature"
                       min="0"
-                      max="1"
+                      max="2"
                       step="0.01"
                       value={settings.temperature}
                       onChange={handleNumberChange}
@@ -1628,6 +1632,50 @@ function Settings() {
                       <Save className="h-4 w-4 mr-2" />
                       {editingModelId ? 'Update Model' : 'Add Model'}
                     </Button>
+                  </div>
+                </div>
+
+                {/* Model Filter */}
+                <div className="border-t pt-6 space-y-4">
+                  <h4 className="font-medium text-sm">Model Filter</h4>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Filter models shown in the model selector. Enter one filter term per line (case-insensitive). Only models matching any filter term will be displayed.
+                    </p>
+                    <Textarea
+                      id="model-filter"
+                      name="modelFilter"
+                      value={settings.modelFilter || ''}
+                      onChange={handleChange}
+                      rows={6}
+                      placeholder="Enter one filter term per line (e.g., gpt, kimi, llama)"
+                      className="min-h-[120px] font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Example: Enter "gpt" on one line and "kimi" on another to show only models containing "gpt" or "kimi" (case-insensitive).
+                    </p>
+                  </div>
+                </div>
+
+                {/* Model Filter Exclude */}
+                <div className="border-t pt-6 space-y-4">
+                  <h4 className="font-medium text-sm">Filter Out Models</h4>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Models containing these words will be filtered out regardless of inclusion filters. Enter one filter term per line (case-insensitive).
+                    </p>
+                    <Textarea
+                      id="model-filter-exclude"
+                      name="modelFilterExclude"
+                      value={settings.modelFilterExclude || ''}
+                      onChange={handleChange}
+                      rows={6}
+                      placeholder="Enter one filter term per line (e.g., deprecated, legacy, test)"
+                      className="min-h-[120px] font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Example: Enter "deprecated" on one line to hide all models containing "deprecated" in their name, even if they match inclusion filters.
+                    </p>
                   </div>
                 </div>
               </CardContent>

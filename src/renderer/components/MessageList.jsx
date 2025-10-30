@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Message from './Message';
 import MarkdownRenderer from './MarkdownRenderer';
 
-function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) {
+function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage, onReloadFromMessage, loading, onActionsVisible }) {
   const [fullScreenImage, setFullScreenImage] = useState(null);
 
   // Effect to handle Escape key for closing fullscreen image
@@ -40,14 +40,34 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
 
   return (
     <div className="space-y-2 pt-4 p-4">
-      {displayMessages.map((message, index) => (
-        <Message 
-          key={index} 
-          message={message} 
-          onToolCallExecute={onToolCallExecute}
-          allMessages={messages} // Pass all messages for the Message component to find tool results
-          isLastMessage={index === displayMessages.length - 1}
-        >
+      {displayMessages.map((message, index) => {
+        // Find the original index in the messages array (including tool messages)
+        const originalIndex = messages.findIndex((m, i) => {
+          // Find the nth non-tool message in messages that matches this display message
+          let nonToolCount = 0;
+          for (let j = 0; j <= i; j++) {
+            if (messages[j].role !== 'tool') {
+              if (nonToolCount === index) {
+                return j === i;
+              }
+              nonToolCount++;
+            }
+          }
+          return false;
+        });
+        
+        return (
+          <Message 
+            key={index} 
+            message={message} 
+            messageIndex={originalIndex}
+            onToolCallExecute={onToolCallExecute}
+            onReloadFromMessage={onReloadFromMessage}
+            allMessages={messages} // Pass all messages for the Message component to find tool results
+            isLastMessage={index === displayMessages.length - 1}
+            loading={loading}
+            onActionsVisible={onActionsVisible}
+          >
           {message.role === 'user' ? (
             <div className="flex items-start gap-2">
               <div className="flex-1 flex flex-col gap-2"> {/* Use flex-col for text/images */}
@@ -56,7 +76,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
                   message.content.map((part, partIndex) => {
                     if (part.type === 'text') {
                       // Render text part as plain text
-                      return <div key={`text-${partIndex}`} className="whitespace-pre-wrap">{part.text || ''}</div>;
+                      return <div key={`text-${partIndex}`} className="whitespace-pre-wrap text-sm">{part.text || ''}</div>;
                     } else if (part.type === 'image_url' && part.image_url?.url) {
                       // Render image preview
                       return (
@@ -73,7 +93,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
                   })
                 ) : (
                   // If content is just a string, render it directly as plain text
-                  <div className="whitespace-pre-wrap">{message.content || ''}</div>
+                  <div className="whitespace-pre-wrap text-sm">{message.content || ''}</div>
                 )}
               </div>
             </div>
@@ -81,7 +101,8 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage }) 
             <MarkdownRenderer content={message.content || ''} />
           ) : null}
         </Message>
-      ))}
+        );
+      })}
 
       {/* Fullscreen Image Overlay */}
       {fullScreenImage && (
