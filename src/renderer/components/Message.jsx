@@ -138,23 +138,27 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
             <div className="flex flex-wrap gap-2">
               {/* Reasoning summaries - displayed as activity lines while streaming AND reasoning not yet complete */}
               {/* Hide shimmer if content has started streaming, even if reasoningDuration not set yet */}
+              {/* Only show the most recent summary to avoid multiple shimmering texts */}
               {hasReasoningSummaries && isStreamingMessage && !reasoningDuration && !message.content && (
                 <div className="flex flex-col gap-1.5 w-full mb-2">
-                  {reasoningSummaries.map((summary) => (
-                    <div 
-                      key={summary.index}
-                      className="flex items-center text-sm"
-                    >
-                      <TextShimmer 
-                        as="span" 
-                        duration={2.5} 
-                        spread={3}
-                        className="text-sm font-medium text-gray-700"
+                  {(() => {
+                    const latestSummary = reasoningSummaries[reasoningSummaries.length - 1];
+                    return (
+                      <div 
+                        key={latestSummary.index}
+                        className="flex items-center text-sm"
                       >
-                        {summary.summary}
-                      </TextShimmer>
-                    </div>
-                  ))}
+                        <TextShimmer 
+                          as="span" 
+                          duration={2.5} 
+                          spread={3}
+                          className="text-sm font-medium text-gray-700"
+                        >
+                          {latestSummary.summary}
+                        </TextShimmer>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               
