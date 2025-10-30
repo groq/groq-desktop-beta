@@ -12,8 +12,8 @@
     "build": "vite build",
     "build:electron": "electron-builder",
     "dist": "pnpm build && pnpm build:electron",
-    "dist:mac": "npm build && electron-builder --mac",
-    "dist:win": "npm build && electron-builder --win",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:win": "pnpm build && electron-builder --win",
     "dist:linux": "pnpm build && electron-builder --linux",
     "test:platforms": "./test-cross-platform.sh",
     "test:paths": "node test-paths.js"
