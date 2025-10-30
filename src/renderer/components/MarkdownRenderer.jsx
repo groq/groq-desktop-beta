@@ -188,7 +188,8 @@ function MarkdownRenderer({ content, disableMath = false }) {
   }
 
   // Conditionally include math plugins based on disableMath prop
-  const remarkPlugins = disableMath ? [remarkGfm] : [remarkGfm, remarkMath];
+  // Configure remarkMath to only use $$ for display math, not single $ (to avoid conflicts with dollar amounts)
+  const remarkPlugins = disableMath ? [remarkGfm] : [remarkGfm, [remarkMath, { singleDollarTextMath: false }]];
   const rehypePlugins = disableMath ? [] : [rehypeKatex];
 
   return (
