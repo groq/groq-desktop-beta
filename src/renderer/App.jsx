@@ -102,6 +102,7 @@ function App() {
 
   // --- Cancellation State ---
   const cancelledRef = useRef(false); // Track if current operation is cancelled
+  const loadingRef = useRef(false); // Track loading state for cleanup
   // --- End Cancellation State ---
 
   const handleRemoveLastMessage = () => {
@@ -696,17 +697,22 @@ function App() {
     setPausedChatState(null);
   };
 
+  // Keep loadingRef in sync with loading state
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
   // Cleanup function to stop any active streams when component unmounts (page reload/navigation)
   useEffect(() => {
     return () => {
-      // Stop any active streams when the component unmounts
-      if (loading) {
+      // Stop any active streams when the component actually unmounts (not when loading changes)
+      if (loadingRef.current) {
         console.log('Component unmounting, stopping active streams...');
         cancelledRef.current = true;
         window.electron.stopChatStream();
       }
     };
-  }, [loading]);
+  }, []); // Empty dependency array - only run on actual mount/unmount
 
   // Core function to execute a chat turn (fetch response, handle tools)
   // Refactored from the main loop of handleSendMessage
@@ -880,6 +886,8 @@ function App() {
         // Handle stream completion
         await new Promise((resolve, reject) => {
             streamHandler.onComplete((data) => {
+                console.log(`[Frontend] Stream complete: finish_reason=${data.finish_reason}, content_length=${data.content?.length || 0}, has_tool_calls=${!!data.tool_calls}, has_reasoning=${!!data.reasoning}`);
+                
                 // Use existing duration if already set, otherwise calculate it now
                 let reasoningDuration = finalAssistantData.reasoningDuration;
                 if (!reasoningDuration && finalAssistantData.reasoningStartTime && data.reasoning) {
@@ -907,6 +915,7 @@ function App() {
                     const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
                     if (idx !== -1) {
                         newMessages[idx] = finalAssistantData; // Replace placeholder
+                        console.log(`[Frontend] Updated message at index ${idx}`);
                     } else {
                         // Should not happen if placeholder logic is correct
                         console.warn("Streaming placeholder not found for replacement.");
@@ -971,6 +980,8 @@ function App() {
         // Clean up stream handlers
         streamHandler.cleanup();
 
+        console.log(`[Frontend] Turn message received: has_tool_calls=${!!turnAssistantMessage?.tool_calls}, tool_count=${turnAssistantMessage?.tool_calls?.length || 0}, content_length=${turnAssistantMessage?.content?.length || 0}`);
+
         // Check and process tool calls if any
         if (turnAssistantMessage && turnAssistantMessage.tool_calls?.length > 0) {
             // IMPORTANT: Pass the messages *before* this assistant message was added
@@ -995,6 +1006,8 @@ function App() {
              // No tools, this turn is complete
             currentTurnStatus = 'completed_no_tools';
         }
+
+        console.log(`[Frontend] Turn completed with status: ${currentTurnStatus}`);
 
     } catch (error) {
       console.error('Error in executeChatTurn:', error);
@@ -1057,11 +1070,15 @@ function App() {
 
     let currentApiMessages = initialMessages; // Start with messages including the new user one
     let conversationStatus = 'processing'; // Start the conversation flow
+    let emptyResponseRetries = 0; // Track retries for empty responses
+    const MAX_EMPTY_RETRIES = 3; // Maximum retries for empty responses
 
     try {
         while (conversationStatus === 'processing' || conversationStatus === 'completed_with_tools') {
+            console.log(`[Frontend] Starting chat turn with ${currentApiMessages.length} messages`);
             const { status, assistantMessage, toolResponseMessages } = await executeChatTurn(currentApiMessages);
 
+            console.log(`[Frontend] Chat turn returned: status=${status}, has_assistant=${!!assistantMessage}, tool_responses=${toolResponseMessages?.length || 0}`);
             conversationStatus = status; // Update status for loop condition
 
             if (status === 'paused') {
@@ -1076,6 +1093,9 @@ function App() {
                  // Error occurred, stop the loop
                   break;
             } else if (status === 'completed_with_tools') {
+                  // Reset empty response retry counter since we got valid tool calls
+                  emptyResponseRetries = 0;
+                  
                   // Prepare messages for the next turn ONLY if tools were completed
                   if (assistantMessage && toolResponseMessages.length > 0) {
                       // Format tool responses for the API
@@ -1102,8 +1122,52 @@ function App() {
                       break;
                   }
             } else if (status === 'completed_no_tools') {
-                  // Conversation turn finished without tools, stop the loop
-                  break;
+                  // Conversation turn finished without tools
+                  // Check if we got an empty response (only reasoning, no content)
+                  if (assistantMessage && (!assistantMessage.content || assistantMessage.content.trim() === '')) {
+                      if (emptyResponseRetries < MAX_EMPTY_RETRIES) {
+                          emptyResponseRetries++;
+                          console.warn(`[Frontend] Model completed with no content. Retrying (${emptyResponseRetries}/${MAX_EMPTY_RETRIES})...`);
+                          
+                          // Remove the empty assistant message from the UI
+                          setMessages(prev => {
+                              const newMessages = [...prev];
+                              // Find and remove the last assistant message (which has empty content)
+                              const lastAssistantIdx = newMessages.map((m, i) => ({ idx: i, msg: m }))
+                                  .reverse()
+                                  .find(({ msg }) => msg.role === 'assistant')?.idx;
+                              if (lastAssistantIdx !== undefined) {
+                                  newMessages.splice(lastAssistantIdx, 1);
+                                  console.log(`[Frontend] Removed empty assistant message at index ${lastAssistantIdx}`);
+                              }
+                              return newMessages;
+                          });
+                          
+                          // Retry with the same messages (don't modify currentApiMessages)
+                          conversationStatus = 'processing';
+                      } else {
+                          // Max retries reached, show error
+                          console.error('[Frontend] Max retries reached for empty response. Stopping.');
+                          setMessages(prev => {
+                              const newMessages = [...prev];
+                              // Find and replace the last assistant message with error
+                              const lastAssistantIdx = newMessages.map((m, i) => ({ idx: i, msg: m }))
+                                  .reverse()
+                                  .find(({ msg }) => msg.role === 'assistant')?.idx;
+                              if (lastAssistantIdx !== undefined) {
+                                  newMessages[lastAssistantIdx] = {
+                                      role: 'assistant',
+                                      content: 'Error: Model failed to generate a response after multiple attempts.'
+                                  };
+                              }
+                              return newMessages;
+                          });
+                          break;
+                      }
+                  } else {
+                      // Normal completion with content, stop the loop
+                      break;
+                  }
             }
         } // End while loop
 

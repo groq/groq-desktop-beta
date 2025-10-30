@@ -193,6 +193,10 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
         if (accumulatedData.content === delta.content && accumulatedData.summaryInterval && accumulatedData.reasoning.length > 0) {
             clearInterval(accumulatedData.summaryInterval);
             accumulatedData.summaryInterval = null;
+            const streamInfo = activeStreams.get(streamId);
+            if (streamInfo) {
+                streamInfo.summaryInterval = null;
+            }
             console.log('[Backend] First content token received, cleared summary interval');
         }
     }
@@ -216,6 +220,17 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
             
             // Set up interval to check every 2 seconds
             accumulatedData.summaryInterval = setInterval(() => {
+                // Check if stream is still active before triggering summarization
+                const currentStreamInfo = activeStreams.get(streamId);
+                if (!currentStreamInfo || currentStreamInfo.cancelled) {
+                    console.log(`[Backend] Interval check: Stream ${streamId} no longer active, stopping interval`);
+                    if (accumulatedData.summaryInterval) {
+                        clearInterval(accumulatedData.summaryInterval);
+                        accumulatedData.summaryInterval = null;
+                    }
+                    return;
+                }
+                
                 const now = Date.now();
                 const timeSinceLastSummary = now - accumulatedData.lastSummarizedTime;
                 
@@ -233,6 +248,12 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
                         .catch(err => console.error('[Backend] Error in background summarization:', err));
                 }
             }, 2000);
+            
+            // Store interval reference in activeStreams so stopChatStream can clear it
+            const streamInfo = activeStreams.get(streamId);
+            if (streamInfo) {
+                streamInfo.summaryInterval = accumulatedData.summaryInterval;
+            }
         }
     }
 
@@ -337,14 +358,19 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
     return chunk.choices[0].finish_reason;
 }
 
-function handleStreamCompletion(event, accumulatedData, finishReason) {
+function handleStreamCompletion(event, accumulatedData, finishReason, streamId) {
     // Clear the summary interval if it exists
     if (accumulatedData.summaryInterval) {
         clearInterval(accumulatedData.summaryInterval);
+        accumulatedData.summaryInterval = null;
+        const streamInfo = activeStreams.get(streamId);
+        if (streamInfo) {
+            streamInfo.summaryInterval = null;
+        }
         console.log('[Backend] Cleared summary interval on completion');
     }
     
-    event.sender.send('chat-stream-complete', {
+    const completionData = {
         content: accumulatedData.content,
         role: "assistant",
         tool_calls: accumulatedData.toolCalls.length > 0 ? accumulatedData.toolCalls : undefined,
@@ -352,7 +378,11 @@ function handleStreamCompletion(event, accumulatedData, finishReason) {
         executed_tools: accumulatedData.executedTools.length > 0 ? accumulatedData.executedTools : undefined,
         finish_reason: finishReason,
         usage: accumulatedData.usage
-    });
+    };
+    
+    console.log(`[Backend] Stream ${streamId} complete: finish_reason=${finishReason}, content_length=${accumulatedData.content.length}, tool_calls=${accumulatedData.toolCalls.length}, reasoning_length=${accumulatedData.reasoning.length}`);
+    
+    event.sender.send('chat-stream-complete', completionData);
 }
 
 // Helper function to count words in text
@@ -370,6 +400,7 @@ function getLastNWords(text, n) {
 async function summarizeReasoningChunk(groq, reasoningText, event, streamId, summaryIndex) {
     try {
         console.log(`[Backend Summary ${summaryIndex}] Starting summarization for stream ${streamId}, text length: ${reasoningText.length}`);
+        
         const response = await groq.chat.completions.create({
             messages: [
                 {
@@ -387,6 +418,13 @@ async function summarizeReasoningChunk(groq, reasoningText, event, streamId, sum
             stream: false
         });
         
+        // Check if stream is still active before sending results
+        const streamInfo = activeStreams.get(streamId);
+        if (!streamInfo || streamInfo.cancelled) {
+            console.log(`[Backend Summary ${summaryIndex}] Stream ${streamId} no longer active, discarding summary`);
+            return;
+        }
+        
         const summary = response.choices[0]?.message?.content?.trim() || 'Processing thoughts';
         console.log(`[Backend Summary ${summaryIndex}] Completed: "${summary}"`);
         console.log(`[Backend Summary ${summaryIndex}] Sending to frontend via chat-stream-reasoning-summary`);
@@ -401,6 +439,14 @@ async function summarizeReasoningChunk(groq, reasoningText, event, streamId, sum
         return summary;
     } catch (error) {
         console.error(`[Backend Summary ${summaryIndex}] Error summarizing:`, error.message);
+        
+        // Check if stream is still active before sending error fallback
+        const streamInfo = activeStreams.get(streamId);
+        if (!streamInfo || streamInfo.cancelled) {
+            console.log(`[Backend Summary ${summaryIndex}] Stream ${streamId} no longer active, discarding error fallback`);
+            return;
+        }
+        
         const fallbackSummary = 'Analyzing reasoning';
         event.sender.send('chat-stream-reasoning-summary', {
             streamId,
@@ -418,6 +464,14 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
     const baseTemperature = chatCompletionParams.temperature;
 
     while (retryCount <= MAX_TOOL_USE_RETRIES) {
+        // Clear any existing interval from previous retry
+        const streamInfo = activeStreams.get(streamId);
+        if (streamInfo && streamInfo.summaryInterval) {
+            console.log('[Backend] Clearing interval from previous retry');
+            clearInterval(streamInfo.summaryInterval);
+            streamInfo.summaryInterval = null;
+        }
+        
         let accumulatedData = {
             content: "",
             toolCalls: [],
@@ -435,7 +489,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
         try {
 
             // Check if stream was cancelled before starting
-            const streamInfo = activeStreams.get(streamId);
             if (!streamInfo || streamInfo.cancelled) {
                 console.log(`Stream ${streamId} was cancelled before starting`);
                 event.sender.send('chat-stream-cancelled', { streamId });
@@ -458,6 +511,10 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                     // Clear summary interval if it exists
                     if (accumulatedData.summaryInterval) {
                         clearInterval(accumulatedData.summaryInterval);
+                        accumulatedData.summaryInterval = null;
+                        if (currentStreamInfo) {
+                            currentStreamInfo.summaryInterval = null;
+                        }
                         console.log('[Backend] Cleared summary interval on cancellation');
                     }
                     event.sender.send('chat-stream-cancelled', { streamId });
@@ -468,7 +525,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 const finishReason = processStreamChunk(chunk, event, accumulatedData, groq, streamId);
 
                 if (finishReason) {
-                    handleStreamCompletion(event, accumulatedData, finishReason);
+                    handleStreamCompletion(event, accumulatedData, finishReason, streamId);
                     activeStreams.delete(streamId);
                     return;
                 }
@@ -477,6 +534,11 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
             // Clear summary interval before exiting
             if (accumulatedData.summaryInterval) {
                 clearInterval(accumulatedData.summaryInterval);
+                accumulatedData.summaryInterval = null;
+                const streamInfo = activeStreams.get(streamId);
+                if (streamInfo) {
+                    streamInfo.summaryInterval = null;
+                }
                 console.log('[Backend] Cleared summary interval on unexpected end');
             }
             
@@ -492,6 +554,10 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 // Clear summary interval
                 if (accumulatedData.summaryInterval) {
                     clearInterval(accumulatedData.summaryInterval);
+                    accumulatedData.summaryInterval = null;
+                    if (streamInfo) {
+                        streamInfo.summaryInterval = null;
+                    }
                     console.log('[Backend] Cleared summary interval on error cancellation');
                 }
                 event.sender.send('chat-stream-cancelled', { streamId });
@@ -553,6 +619,11 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
             // Clear summary interval
             if (accumulatedData.summaryInterval) {
                 clearInterval(accumulatedData.summaryInterval);
+                accumulatedData.summaryInterval = null;
+                const currentStreamInfo = activeStreams.get(streamId);
+                if (currentStreamInfo) {
+                    currentStreamInfo.summaryInterval = null;
+                }
             }
             
             activeStreams.delete(streamId);
@@ -590,7 +661,8 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         activeStreams.set(streamId, {
             cancelled: false,
             stream: null,
-            event: event
+            event: event,
+            summaryInterval: null
         });
 
         validateApiKey(settings);
@@ -659,6 +731,12 @@ function stopChatStream(streamId) {
         if (streamInfo) {
             console.log(`Stopping stream ${streamId}`);
             streamInfo.cancelled = true;
+            // Clear the summary interval if it exists
+            if (streamInfo.summaryInterval) {
+                clearInterval(streamInfo.summaryInterval);
+                streamInfo.summaryInterval = null;
+                console.log(`[Backend] Cleared summary interval for stream ${streamId}`);
+            }
             // Note: The actual stream interruption happens in the iteration loop
         }
     } else {
@@ -666,6 +744,12 @@ function stopChatStream(streamId) {
         console.log(`Stopping all active streams (${activeStreams.size} total)`);
         for (const [id, streamInfo] of activeStreams.entries()) {
             streamInfo.cancelled = true;
+            // Clear the summary interval if it exists
+            if (streamInfo.summaryInterval) {
+                clearInterval(streamInfo.summaryInterval);
+                streamInfo.summaryInterval = null;
+                console.log(`[Backend] Cleared summary interval for stream ${id}`);
+            }
         }
     }
 }
