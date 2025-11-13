@@ -166,7 +166,7 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
 }
 
 // Processes individual stream chunks for compound-beta and regular models
-function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
+function processStreamChunk(chunk, event, accumulatedData, groq, streamId, settings) {
     if (!chunk.choices?.[0]) return;
 
     const { delta } = chunk.choices[0];
@@ -215,11 +215,15 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
         
         // Start interval timer on first reasoning chunk
         if (!accumulatedData.summaryInterval) {
-            console.log('[Backend] First reasoning chunk, starting summary interval');
-            accumulatedData.lastSummarizedTime = Date.now();
-            
-            // Set up interval to check every 2 seconds
-            accumulatedData.summaryInterval = setInterval(() => {
+            // Check if thinking summaries are disabled
+            if (settings?.disableThinkingSummaries) {
+                console.log('[Backend] Thinking summaries disabled, skipping summary interval setup');
+            } else {
+                console.log('[Backend] First reasoning chunk, starting summary interval');
+                accumulatedData.lastSummarizedTime = Date.now();
+                
+                // Set up interval to check every 2 seconds
+                accumulatedData.summaryInterval = setInterval(() => {
                 // Check if stream is still active before triggering summarization
                 const currentStreamInfo = activeStreams.get(streamId);
                 if (!currentStreamInfo || currentStreamInfo.cancelled) {
@@ -253,6 +257,7 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId) {
             const streamInfo = activeStreams.get(streamId);
             if (streamInfo) {
                 streamInfo.summaryInterval = accumulatedData.summaryInterval;
+            }
             }
         }
     }
@@ -458,7 +463,7 @@ async function summarizeReasoningChunk(groq, reasoningText, event, streamId, sum
 }
 
 // Executes stream with retry logic for tool_use_failed errors and tool call validation errors
-async function executeStreamWithRetry(groq, chatCompletionParams, event, streamId) {
+async function executeStreamWithRetry(groq, chatCompletionParams, event, streamId, settings) {
     const MAX_TOOL_USE_RETRIES = 25;
     let retryCount = 0;
     const baseTemperature = chatCompletionParams.temperature;
@@ -522,7 +527,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                     return;
                 }
 
-                const finishReason = processStreamChunk(chunk, event, accumulatedData, groq, streamId);
+                const finishReason = processStreamChunk(chunk, event, accumulatedData, groq, streamId, settings);
 
                 if (finishReason) {
                     handleStreamCompletion(event, accumulatedData, finishReason, streamId);
@@ -714,7 +719,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         const prunedMessages = pruneMessageHistory(cleanedMessages, modelToUse, modelContextSizes);
         const chatCompletionParams = buildApiParams(prunedMessages, modelToUse, settings, tools, modelContextSizes);
 
-        await executeStreamWithRetry(groq, chatCompletionParams, event, streamId);
+        await executeStreamWithRetry(groq, chatCompletionParams, event, streamId, settings);
     } catch (outerError) {
         activeStreams.delete(streamId);
         event.sender.send('chat-stream-error', { error: outerError.message || `Setup error: ${outerError}` });

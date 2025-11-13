@@ -24,7 +24,8 @@ function loadSettings() {
             toolOutputLimit: 8000,
             customApiBaseUrl: '',
             customApiBaseUrlEnabled: false,
-            customModels: {}
+            customModels: {},
+            disableThinkingSummaries: false
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -43,7 +44,8 @@ function loadSettings() {
         toolOutputLimit: 8000,
         customApiBaseUrl: '',
         customApiBaseUrlEnabled: false,
-        customModels: {}
+        customModels: {},
+        disableThinkingSummaries: false
     };
 
     try {
@@ -81,6 +83,7 @@ function loadSettings() {
             settings.customApiBaseUrl = settings.customApiBaseUrl || defaultSettings.customApiBaseUrl;
             settings.customApiBaseUrlEnabled = settings.customApiBaseUrlEnabled ?? defaultSettings.customApiBaseUrlEnabled;
             settings.customModels = settings.customModels || defaultSettings.customModels;
+            settings.disableThinkingSummaries = settings.disableThinkingSummaries ?? defaultSettings.disableThinkingSummaries;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

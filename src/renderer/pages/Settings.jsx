@@ -30,7 +30,8 @@ function Settings() {
       browserSearch: false
     },
     modelFilter: '',
-    modelFilterExclude: ''
+    modelFilterExclude: '',
+    disableThinkingSummaries: false
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -79,6 +80,9 @@ function Settings() {
         if (!settingsData.reasoning_effort) {
             settingsData.reasoning_effort = 'medium';
         }
+        if (settingsData.disableThinkingSummaries === undefined) {
+            settingsData.disableThinkingSummaries = false;
+        }
         setSettings(settingsData);
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -102,7 +106,8 @@ function Settings() {
             },
             reasoning_effort: 'medium',
             modelFilter: '',
-            modelFilterExclude: ''
+            modelFilterExclude: '',
+            disableThinkingSummaries: false
         }));
       }
     };
@@ -1025,6 +1030,31 @@ function Settings() {
                     onChange={(e) => handleToggleChange('popupEnabled', e.target.checked)}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Thinking Summaries Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Thinking Summaries</CardTitle>
+                <CardDescription>
+                  Control whether thinking/reasoning summaries are generated during model reasoning. When disabled, only the raw reasoning text will be shown.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="disable-thinking-summaries" className="font-medium">
+                    Disable Thinking Summaries
+                  </Label>
+                  <Switch
+                    id="disable-thinking-summaries"
+                    checked={settings.disableThinkingSummaries || false}
+                    onChange={(e) => handleToggleChange('disableThinkingSummaries', e.target.checked)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  When enabled, thinking summaries will not be generated. Only the raw reasoning text will be displayed.
+                </p>
               </CardContent>
             </Card>
 
