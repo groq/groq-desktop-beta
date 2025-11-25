@@ -261,7 +261,14 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                   return (
                     <div key={`tool-${tool.index || index}`} className={`p-3 rounded-md text-sm border ${isLive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
                       <div className={`font-semibold mb-2 ${isLive ? 'text-green-800' : 'text-gray-800'}`}>
-                        {tool.type === 'python' ? '🐍 Python Code' : `🔧 ${tool.type || 'Tool'}`}
+                        {tool.type === 'python' ? '🐍 Python Code' : `🔧 ${tool.type || 'function'}`}
+                        
+                        {tool.server_label && (
+                          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded border ${isLive ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                            {tool.server_label}
+                          </span>
+                        )}
+
                         {tool.name && (
                           <span className={`ml-2 font-normal text-sm ${isLive ? 'text-green-700' : 'text-gray-700'}`}>
                             ({tool.name})
@@ -357,18 +364,22 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
           {children}
         </div>
         
-        {/* MCP tool calls */}
-        {tool_calls && tool_calls.length > 0 && (
-          <div className="mb-4">
-            {tool_calls.map((toolCall, index) => (
-              <ToolCall 
-                key={toolCall.id || index} 
-                toolCall={toolCall} 
-                toolResult={findToolResult(toolCall.id)}
-              />
-            ))}
-          </div>
-        )}
+        {/* Client-side tool calls (filter out remote MCP tools which are shown separately) */}
+        {tool_calls && tool_calls.length > 0 && (() => {
+          // Filter out remote MCP tools - they have server_label set
+          const clientSideToolCalls = tool_calls.filter(tc => !tc.server_label);
+          return clientSideToolCalls.length > 0 ? (
+            <div className="mb-4">
+              {clientSideToolCalls.map((toolCall, index) => (
+                <ToolCall 
+                  key={toolCall.id || index} 
+                  toolCall={toolCall} 
+                  toolResult={findToolResult(toolCall.id)}
+                />
+              ))}
+            </div>
+          ) : null;
+        })()}
 
         {/* Usage stats, copy, and reload button for the last assistant message only */}
         {!isUser && showActions && (

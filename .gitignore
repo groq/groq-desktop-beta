@@ -33,3 +33,6 @@ pnpm-debug.log*
 .vscode/
 *.swp
 *.swo
+
+# Local test scripts
+local-test-scripts/

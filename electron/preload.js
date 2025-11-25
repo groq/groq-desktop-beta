@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electron', {
   // Chat API - streaming only
   executeToolCall: (toolCall) => ipcRenderer.invoke('execute-tool-call', toolCall),
   
+  // NOTE: sendMcpApprovalResponse removed - Groq does not yet support mcp_approval_response
+  
   // Streaming API events
   startChatStream: (messages, model) => {
     // Start a new chat stream
@@ -39,6 +41,10 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('chat-stream-tool-execution', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-tool-execution', callback);
       },
+      onMcpApprovalRequest: (callback) => {
+        ipcRenderer.on('chat-stream-mcp-approval-request', (_, data) => callback(data));
+        return () => ipcRenderer.removeListener('chat-stream-mcp-approval-request', callback);
+      },
       onComplete: (callback) => {
         ipcRenderer.on('chat-stream-complete', (_, data) => callback(data));
         return () => ipcRenderer.removeListener('chat-stream-complete', callback);
@@ -62,6 +68,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('chat-stream-reasoning');
         ipcRenderer.removeAllListeners('chat-stream-reasoning-summary');
         ipcRenderer.removeAllListeners('chat-stream-tool-execution');
+        ipcRenderer.removeAllListeners('chat-stream-mcp-approval-request');
         ipcRenderer.removeAllListeners('chat-stream-complete');
         ipcRenderer.removeAllListeners('chat-stream-error');
         ipcRenderer.removeAllListeners('chat-stream-cancelled');

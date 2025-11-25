@@ -34,7 +34,8 @@ function Settings() {
     disableThinkingSummaries: false,
     useResponsesApi: false,
     googleConnectors: { gmail: false, calendar: false, drive: false },
-    googleOAuthToken: ''
+    googleOAuthToken: '',
+    remoteMcpServers: {}
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,6 +64,19 @@ function Settings() {
     builtin_tools_supported: false
   });
   const [editingModelId, setEditingModelId] = useState(null);
+  
+  // Remote MCP Server state
+  const [newRemoteMcpServer, setNewRemoteMcpServer] = useState({
+    id: '',
+    serverUrl: '',
+    serverLabel: '',
+    serverDescription: '',
+    requireApproval: 'never',
+    allowedTools: '', // Comma-separated list of tool names to filter (empty = all tools)
+    headers: {}
+  });
+  const [newRemoteMcpHeader, setNewRemoteMcpHeader] = useState({ key: '', value: '' });
+  const [editingRemoteMcpServerId, setEditingRemoteMcpServerId] = useState(null);
   
   const statusTimeoutRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -95,6 +109,9 @@ function Settings() {
         if (!settingsData.googleOAuthToken) {
             settingsData.googleOAuthToken = '';
         }
+        if (!settingsData.remoteMcpServers) {
+            settingsData.remoteMcpServers = {};
+        }
         setSettings(settingsData);
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -122,7 +139,8 @@ function Settings() {
             disableThinkingSummaries: false,
             useResponsesApi: false,
             googleConnectors: { gmail: false, calendar: false, drive: false },
-            googleOAuthToken: ''
+            googleOAuthToken: '',
+            remoteMcpServers: {}
         }));
       }
     };
@@ -752,6 +770,158 @@ function Settings() {
     setNewCustomModel({ id: '', displayName: '', context: 8192, vision_supported: false, builtin_tools_supported: false });
   };
 
+  // Remote MCP Server Management Functions
+  const handleNewRemoteMcpServerChange = (e) => {
+    const { name, value } = e.target;
+    setNewRemoteMcpServer(prev => ({ ...prev, [name]: value }));
+  };
+
+  const addRemoteMcpHeader = () => {
+    if (!newRemoteMcpHeader.key) return;
+    
+    setNewRemoteMcpServer(prev => ({
+      ...prev,
+      headers: {
+        ...prev.headers,
+        [newRemoteMcpHeader.key]: newRemoteMcpHeader.value
+      }
+    }));
+    
+    setNewRemoteMcpHeader({ key: '', value: '' });
+  };
+
+  const removeRemoteMcpHeader = (key) => {
+    setNewRemoteMcpServer(prev => {
+      const updatedHeaders = { ...prev.headers };
+      delete updatedHeaders[key];
+      return { ...prev, headers: updatedHeaders };
+    });
+  };
+
+  const handleRemoteMcpHeaderChange = (e) => {
+    const { name, value } = e.target;
+    setNewRemoteMcpHeader(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveRemoteMcpServer = (e) => {
+    e.preventDefault();
+    
+    if (!newRemoteMcpServer.id.trim()) {
+      setSaveStatus({ type: 'error', message: 'Server ID is required' });
+      return;
+    }
+
+    if (!newRemoteMcpServer.serverUrl.trim()) {
+      setSaveStatus({ type: 'error', message: 'Server URL is required' });
+      return;
+    }
+
+    // Validate URL
+    try {
+      new URL(newRemoteMcpServer.serverUrl);
+    } catch (urlError) {
+      setSaveStatus({ type: 'error', message: `Invalid URL: ${urlError.message}` });
+      return;
+    }
+
+    // Create the server configuration
+    const serverConfig = {
+      serverUrl: newRemoteMcpServer.serverUrl.trim(),
+      serverLabel: newRemoteMcpServer.serverLabel.trim() || newRemoteMcpServer.id.trim(),
+      serverDescription: newRemoteMcpServer.serverDescription.trim(),
+      requireApproval: newRemoteMcpServer.requireApproval || 'never'
+    };
+
+    // Include headers if present
+    if (newRemoteMcpServer.headers && Object.keys(newRemoteMcpServer.headers).length > 0) {
+      serverConfig.headers = newRemoteMcpServer.headers;
+    }
+
+    // Include allowedTools if present (filters which tools are available from the server)
+    if (newRemoteMcpServer.allowedTools && newRemoteMcpServer.allowedTools.trim()) {
+      const toolsList = newRemoteMcpServer.allowedTools
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+      if (toolsList.length > 0) {
+        serverConfig.allowedTools = toolsList;
+      }
+    }
+
+    console.log('Saving remote MCP server:', newRemoteMcpServer.id, 'with config:', serverConfig);
+    
+    // Update settings with new/updated remote MCP server
+    const updatedSettings = {
+      ...settings,
+      remoteMcpServers: {
+        ...settings.remoteMcpServers,
+        [newRemoteMcpServer.id]: serverConfig
+      }
+    };
+
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+    
+    // Clear the form
+    setNewRemoteMcpServer({
+      id: '',
+      serverUrl: '',
+      serverLabel: '',
+      serverDescription: '',
+      requireApproval: 'never',
+      allowedTools: '',
+      headers: {}
+    });
+    setEditingRemoteMcpServerId(null);
+  };
+
+  const removeRemoteMcpServer = (serverId) => {
+    const updatedRemoteMcpServers = { ...settings.remoteMcpServers };
+    delete updatedRemoteMcpServers[serverId];
+    
+    const updatedSettings = {
+      ...settings,
+      remoteMcpServers: updatedRemoteMcpServers
+    };
+    
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+
+    // If the removed server was being edited, cancel the edit
+    if (editingRemoteMcpServerId === serverId) {
+      cancelRemoteMcpEditing();
+    }
+  };
+
+  const startRemoteMcpEditing = (serverId) => {
+    const serverToEdit = settings.remoteMcpServers[serverId];
+    if (!serverToEdit) return;
+
+    setEditingRemoteMcpServerId(serverId);
+    setNewRemoteMcpServer({
+      id: serverId,
+      serverUrl: serverToEdit.serverUrl || '',
+      serverLabel: serverToEdit.serverLabel || '',
+      serverDescription: serverToEdit.serverDescription || '',
+      requireApproval: serverToEdit.requireApproval || 'never',
+      allowedTools: Array.isArray(serverToEdit.allowedTools) ? serverToEdit.allowedTools.join(', ') : '',
+      headers: serverToEdit.headers || {}
+    });
+  };
+
+  const cancelRemoteMcpEditing = () => {
+    setEditingRemoteMcpServerId(null);
+    setNewRemoteMcpServer({
+      id: '',
+      serverUrl: '',
+      serverLabel: '',
+      serverDescription: '',
+      requireApproval: 'never',
+      allowedTools: '',
+      headers: {}
+    });
+  };
+
   const getStatusMessage = () => {
     if (isSaving) return 'Saving...';
     return saveStatus?.message || '';
@@ -1042,6 +1212,261 @@ function Settings() {
                           checked={settings.googleConnectors?.drive || false}
                           onChange={(e) => handleGoogleConnectorToggle('drive', e.target.checked)}
                         />
+                      </div>
+                    </div>
+
+                    {/* Remote MCP Servers Section */}
+                    <div className="space-y-4 pt-4 border-t border-muted">
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium">Remote MCP Servers</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Connect to remote MCP servers. Groq handles tool discovery and execution server-side.
+                        </p>
+                      </div>
+
+                      {/* Configured Remote MCP Servers List */}
+                      {Object.keys(settings.remoteMcpServers || {}).length > 0 && (
+                        <div className="space-y-3">
+                          {Object.entries(settings.remoteMcpServers || {}).map(([id, config]) => (
+                            <Card key={id} className="border-border/50">
+                              <CardContent className="p-3">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1 space-y-1">
+                                    <div className="flex items-center space-x-2">
+                                      <Badge variant="secondary" className="text-xs">{config.serverLabel || id}</Badge>
+                                    </div>
+                                    
+                                    <div className="text-xs text-muted-foreground font-mono truncate max-w-[300px]">
+                                      {config.serverUrl}
+                                    </div>
+                                    
+                                    {config.serverDescription && (
+                                      <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                                        {config.serverDescription}
+                                      </div>
+                                    )}
+                                    
+                                    {config.headers && Object.keys(config.headers).length > 0 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        <span>{Object.keys(config.headers).length} custom header(s)</span>
+                                      </div>
+                                    )}
+                                    
+                                    {config.allowedTools && config.allowedTools.length > 0 && (
+                                      <div className="text-xs text-muted-foreground">
+                                        <span>Allowed tools: {config.allowedTools.join(', ')}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex space-x-1 ml-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => startRemoteMcpEditing(id)}
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                      onClick={() => removeRemoteMcpServer(id)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add New Remote MCP Server Form */}
+                      <div className="space-y-3 pt-2">
+                        <h5 className="text-xs font-medium flex items-center space-x-1">
+                          <Plus className="h-3 w-3" />
+                          <span>{editingRemoteMcpServerId ? 'Edit Remote MCP Server' : 'Add Remote MCP Server'}</span>
+                        </h5>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="remote-mcp-id" className="text-xs">Server ID</Label>
+                            <Input
+                              id="remote-mcp-id"
+                              name="id"
+                              value={newRemoteMcpServer.id}
+                              onChange={handleNewRemoteMcpServerChange}
+                              placeholder="e.g., huggingface"
+                              className="h-8 text-sm"
+                              disabled={editingRemoteMcpServerId !== null}
+                            />
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <Label htmlFor="remote-mcp-label" className="text-xs">Display Label</Label>
+                            <Input
+                              id="remote-mcp-label"
+                              name="serverLabel"
+                              value={newRemoteMcpServer.serverLabel}
+                              onChange={handleNewRemoteMcpServerChange}
+                              placeholder="e.g., Hugging Face"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="remote-mcp-url" className="text-xs">Server URL</Label>
+                          <Input
+                            id="remote-mcp-url"
+                            name="serverUrl"
+                            value={newRemoteMcpServer.serverUrl}
+                            onChange={handleNewRemoteMcpServerChange}
+                            placeholder="https://mcp.example.com"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="remote-mcp-description" className="text-xs">Description (helps model understand when to use)</Label>
+                          <Textarea
+                            id="remote-mcp-description"
+                            name="serverDescription"
+                            value={newRemoteMcpServer.serverDescription}
+                            onChange={handleNewRemoteMcpServerChange}
+                            placeholder="e.g., Search and access AI models from Hugging Face"
+                            className="min-h-[60px] text-sm"
+                            rows={2}
+                          />
+                        </div>
+
+                        {/* Require Approval - hidden, Groq only supports "never" currently */}
+
+                        <div className="space-y-1">
+                          <Label htmlFor="remote-mcp-allowed-tools" className="text-xs">Allowed Tools (optional)</Label>
+                          <Input
+                            id="remote-mcp-allowed-tools"
+                            name="allowedTools"
+                            value={newRemoteMcpServer.allowedTools}
+                            onChange={handleNewRemoteMcpServerChange}
+                            placeholder="e.g., model_search, paper_search"
+                            className="h-8 text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Comma-separated list of tool names to allow. Leave empty for all tools.
+                          </p>
+                        </div>
+
+                        {/* Headers Section */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Authentication Headers</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Add headers for authentication (e.g., Authorization, X-API-Key)
+                          </p>
+                          
+                          {Object.entries(newRemoteMcpServer.headers || {}).length > 0 && (
+                            <div className="space-y-1">
+                              {Object.entries(newRemoteMcpServer.headers || {}).map(([key, value]) => (
+                                <div key={key} className="flex items-center space-x-2">
+                                  <div className="flex-1 grid grid-cols-2 gap-2">
+                                    <Input value={key} disabled className="bg-muted h-7 text-xs" />
+                                    <Input 
+                                      value={
+                                        key.toLowerCase().includes('auth') || 
+                                        key.toLowerCase().includes('key') || 
+                                        key.toLowerCase().includes('token') || 
+                                        key.toLowerCase().includes('secret')
+                                          ? '*'.repeat(Math.min(value.length, 20))
+                                          : (typeof value === 'string' && value.length > 20 ? `${value.substring(0, 17)}...` : value)
+                                      } 
+                                      disabled 
+                                      className="bg-muted h-7 text-xs" 
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => removeRemoteMcpHeader(key)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center space-x-2">
+                            <Input
+                              name="key"
+                              value={newRemoteMcpHeader.key}
+                              onChange={handleRemoteMcpHeaderChange}
+                              placeholder="Header name"
+                              className="flex-1 h-7 text-xs"
+                            />
+                            <Input
+                              name="value"
+                              value={newRemoteMcpHeader.value}
+                              onChange={handleRemoteMcpHeaderChange}
+                              placeholder="Header value"
+                              className="flex-1 h-7 text-xs"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                              onClick={addRemoteMcpHeader}
+                              disabled={!newRemoteMcpHeader.key}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-2 pt-2">
+                          {editingRemoteMcpServerId && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={cancelRemoteMcpEditing}
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setNewRemoteMcpServer({
+                                id: '',
+                                serverUrl: '',
+                                serverLabel: '',
+                                serverDescription: '',
+                                requireApproval: 'never',
+                                allowedTools: '',
+                                headers: {}
+                              });
+                              setEditingRemoteMcpServerId(null);
+                            }}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Clear
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveRemoteMcpServer}
+                            disabled={!newRemoteMcpServer.id || !newRemoteMcpServer.serverUrl}
+                          >
+                            <Save className="h-3 w-3 mr-1" />
+                            {editingRemoteMcpServerId ? 'Update' : 'Add'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

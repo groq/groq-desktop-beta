@@ -105,4 +105,4 @@ function ToolApprovalModal({ toolCall, onApprove }) {
   );
 }
 
-export default ToolApprovalModal; 
+export default ToolApprovalModal;

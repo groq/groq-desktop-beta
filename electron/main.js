@@ -315,6 +315,8 @@ app.whenReady().then(async () => {
     chatHandler.stopChatStream(); // Stop all active streams
   });
 
+  // NOTE: MCP approval response handler removed - Groq does not yet support mcp_approval_response
+
   // Tool execution (use module object)
   console.log("[Main Init] Registering execute-tool-call...");
   ipcMain.handle('execute-tool-call', async (event, toolCall) => {

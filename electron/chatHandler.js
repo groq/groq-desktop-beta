@@ -715,7 +715,10 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
 
         // Prepare Connectors
         const tools = [];
+        const remotePrefixes = new Set();
+        
         if (settings.googleConnectors?.gmail && settings.googleOAuthToken) {
+            remotePrefixes.add("gmail");
             tools.push({
                 type: "mcp",
                 server_label: "gmail",
@@ -725,6 +728,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
             });
         }
         if (settings.googleConnectors?.calendar && settings.googleOAuthToken) {
+            remotePrefixes.add("google_calendar");
             tools.push({
                 type: "mcp",
                 server_label: "google_calendar",
@@ -734,6 +738,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
             });
         }
         if (settings.googleConnectors?.drive && settings.googleOAuthToken) {
+            remotePrefixes.add("google_drive");
             tools.push({
                 type: "mcp",
                 server_label: "google_drive",
@@ -741,6 +746,46 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                 authorization: settings.googleOAuthToken,
                 require_approval: "never"
             });
+        }
+
+        // Add Remote MCP Servers
+        if (settings.remoteMcpServers && typeof settings.remoteMcpServers === 'object') {
+            for (const [serverId, serverConfig] of Object.entries(settings.remoteMcpServers)) {
+                if (!serverConfig.serverUrl) {
+                    console.warn(`[ChatHandler] Remote MCP server ${serverId} missing serverUrl, skipping`);
+                    continue;
+                }
+                
+                const label = serverConfig.serverLabel || serverId;
+                remotePrefixes.add(label);
+                // Add normalized version (snake_case) as Groq normalizes labels in function names
+                remotePrefixes.add(label.toLowerCase().replace(/\s+/g, '_'));
+
+                const remoteMcpTool = {
+                    type: "mcp",
+                    server_label: label,
+                    server_url: serverConfig.serverUrl,
+                    require_approval: serverConfig.requireApproval || "never"
+                };
+                
+                // Add server_description if provided
+                if (serverConfig.serverDescription) {
+                    remoteMcpTool.server_description = serverConfig.serverDescription;
+                }
+                
+                // Add headers if provided
+                if (serverConfig.headers && Object.keys(serverConfig.headers).length > 0) {
+                    remoteMcpTool.headers = serverConfig.headers;
+                }
+                
+                // Add allowed_tools if provided (filters which tools are available)
+                if (serverConfig.allowedTools && Array.isArray(serverConfig.allowedTools) && serverConfig.allowedTools.length > 0) {
+                    remoteMcpTool.allowed_tools = serverConfig.allowedTools;
+                }
+                
+                tools.push(remoteMcpTool);
+                console.log(`[ChatHandler] Added remote MCP server: ${serverId} (${serverConfig.serverUrl})`);
+            }
         }
 
         // Add discoveredTools (Client-side tools)
@@ -941,7 +986,49 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                 break;
                                 
                             case 'response.output_item.added':
-                                if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                if (data.item.type === 'mcp_approval_request') {
+                                    // Remote MCP server requires approval before executing tool
+                                    console.log('[Responses API] MCP approval request received:', data.item);
+                                    event.sender.send('chat-stream-mcp-approval-request', {
+                                        id: data.item.id,
+                                        name: data.item.name,
+                                        server_label: data.item.server_label,
+                                        arguments: data.item.arguments
+                                    });
+                                    
+                                    // Store the approval request for later handling
+                                    if (!accumulatedData.mcpApprovalRequests) {
+                                        accumulatedData.mcpApprovalRequests = [];
+                                    }
+                                    accumulatedData.mcpApprovalRequests.push({
+                                        id: data.item.id,
+                                        name: data.item.name,
+                                        server_label: data.item.server_label,
+                                        arguments: data.item.arguments
+                                    });
+                                } else if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                    // Groq sends duplicate function_call events for mcp_call remote tools.
+                                    // Filter out function_call if it follows the remote naming pattern (server__tool)
+                                    // We verify against known remote prefixes to avoid false positives
+                                    let isShadow = false;
+                                    if (data.item.type === 'function_call' && data.item.name) {
+                                        const parts = data.item.name.split('__');
+                                        if (parts.length > 1 && remotePrefixes.has(parts[0])) {
+                                            isShadow = true;
+                                        }
+                                    }
+                                    
+                                    if (isShadow) {
+                                        console.log(`[Responses API] Ignoring shadow function_call for remote tool: ${data.item.name}`);
+                                        if (!accumulatedData.ignoredToolCallIds) accumulatedData.ignoredToolCallIds = new Set();
+                                        accumulatedData.ignoredToolCallIds.add(data.item.id);
+                                        break;
+                                    }
+
+                                    // mcp_call = remote MCP server tool (executed by Groq)
+                                    // function_call = local tool (needs client-side execution)
+                                    const isRemoteMcp = data.item.type === 'mcp_call';
+                                    
                                     const toolCall = {
                                         index: data.output_index,
                                         id: data.item.id,
@@ -950,8 +1037,8 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                             name: data.item.name,
                                             arguments: data.item.arguments || ""
                                         },
-                                        // Extra fields for UI if needed, but strip for standard history
-                                        server_label: data.item.server_label
+                                        // Mark remote MCP tools - use server_label from item or 'remote' as fallback
+                                        server_label: isRemoteMcp ? (data.item.server_label || 'remote') : undefined
                                     };
                                     toolCallsMap.set(data.item.id, toolCall);
                                     
@@ -963,7 +1050,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                             type: 'function',
                                             name: data.item.name,
                                             arguments: data.item.arguments || "",
-                                            server_label: data.item.server_label
+                                            server_label: isRemoteMcp ? (data.item.server_label || 'remote') : undefined
                                         }
                                     });
                                     
@@ -976,6 +1063,9 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                 
                             case 'response.mcp_call_arguments.delta':
                             case 'response.function_call_arguments.delta':
+                                if (accumulatedData.ignoredToolCallIds?.has(data.item_id)) {
+                                    break;
+                                }
                                 if (toolCallsMap.has(data.item_id)) {
                                     const tc = toolCallsMap.get(data.item_id);
                                     tc.function.arguments += data.delta;
@@ -991,7 +1081,46 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                 break;
                                 
                             case 'response.output_item.done':
-                                if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                if (data.item.type === 'mcp_approval_request') {
+                                    // Handle completion of MCP approval request - emit final data
+                                    console.log('[Responses API] MCP approval request done:', data.item);
+                                    
+                                    // Ensure it's in the accumulated data
+                                    if (!accumulatedData.mcpApprovalRequests) {
+                                        accumulatedData.mcpApprovalRequests = [];
+                                    }
+                                    
+                                    // Check if we already have this request (from 'added' event)
+                                    const existingIdx = accumulatedData.mcpApprovalRequests.findIndex(r => r.id === data.item.id);
+                                    if (existingIdx === -1) {
+                                        accumulatedData.mcpApprovalRequests.push({
+                                            id: data.item.id,
+                                            name: data.item.name,
+                                            server_label: data.item.server_label,
+                                            arguments: data.item.arguments
+                                        });
+                                        
+                                        // Emit the request to frontend
+                                        event.sender.send('chat-stream-mcp-approval-request', {
+                                            id: data.item.id,
+                                            name: data.item.name,
+                                            server_label: data.item.server_label,
+                                            arguments: data.item.arguments
+                                        });
+                                    }
+                                } else if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                    // Ignore shadow function_call for remote tools
+                                    if (data.item.type === 'function_call' && data.item.name) {
+                                        const parts = data.item.name.split('__');
+                                        if (parts.length > 1 && remotePrefixes.has(parts[0])) {
+                                            break;
+                                        }
+                                    }
+
+                                    // mcp_call = remote MCP server tool (executed by Groq)
+                                    // function_call = local tool (needs client-side execution)
+                                    const isRemoteMcp = data.item.type === 'mcp_call';
+                                    
                                     // Robustness: Ensure tool call exists in map even if 'added' was missed
                                     if (!toolCallsMap.has(data.item.id)) {
                                         toolCallsMap.set(data.item.id, {
@@ -1002,7 +1131,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                                 name: data.item.name,
                                                 arguments: data.item.arguments || ""
                                             },
-                                            server_label: data.item.server_label
+                                            server_label: isRemoteMcp ? (data.item.server_label || 'remote') : undefined
                                         });
                                     }
 
@@ -1012,6 +1141,10 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                         // Prefer complete arguments from item if available
                                         if (data.item.arguments) {
                                             tc.function.arguments = data.item.arguments;
+                                        }
+                                        // Ensure server_label is set for mcp_call
+                                        if (isRemoteMcp && !tc.server_label) {
+                                            tc.server_label = data.item.server_label || 'remote';
                                         }
                                         toolCallsMap.set(data.item.id, tc);
                                     }
@@ -1027,7 +1160,8 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                             tool: {
                                                 index: data.output_index,
                                                 name: data.item.name,
-                                                output: data.item.output
+                                                output: data.item.output,
+                                                server_label: isRemoteMcp ? (data.item.server_label || 'remote') : undefined
                                             }
                                         });
                                     }
@@ -1061,19 +1195,37 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                  
                  // Prepare tool responses list (only for MCP calls that returned outputs)
                  const toolResponses = [];
+                 const executedTools = []; // For UI display of completed MCP tools
+                 
                  toolOutputsMap.forEach((output, id) => {
                      toolResponses.push({
                          tool_call_id: id,
                          content: typeof output === 'string' ? output : JSON.stringify(output)
                      });
+                     
+                     if (toolCallsMap.has(id)) {
+                         const toolCall = toolCallsMap.get(id);
+                         executedTools.push({
+                             index: toolCall.index,
+                             type: toolCall.type,
+                             name: toolCall.function.name,
+                             arguments: toolCall.function.arguments,
+                             output: output,
+                             server_label: toolCall.server_label
+                         });
+                     }
                  });
 
                  // Determine finish_reason:
+                 // - If we have MCP approval requests pending -> "mcp_approval_required"
                  // - If we have tool calls without outputs, it means client needs to execute them -> "tool_calls"
                  // - If we have tool calls with outputs (MCP), they're already done -> "stop"
                  // - If no tool calls, normal completion -> "stop"
                  let finishReason = "stop";
-                 if (toolCallsMap.size > 0 && toolOutputsMap.size === 0) {
+                 if (accumulatedData.mcpApprovalRequests && accumulatedData.mcpApprovalRequests.length > 0) {
+                     // Remote MCP tools need approval before execution
+                     finishReason = "mcp_approval_required";
+                 } else if (toolCallsMap.size > 0 && toolOutputsMap.size === 0) {
                      // Client-side tools that need execution
                      finishReason = "tool_calls";
                  }
@@ -1084,7 +1236,9 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      finish_reason: finishReason,
                      tool_calls: toolCallsMap.size > 0 ? Array.from(toolCallsMap.values()) : undefined,
                      pre_calculated_tool_responses: toolResponses.length > 0 ? toolResponses : undefined,
-                     reasoning: accumulatedReasoning || undefined
+                     executed_tools: executedTools.length > 0 ? executedTools : undefined,
+                     reasoning: accumulatedReasoning || undefined,
+                     mcp_approval_requests: accumulatedData.mcpApprovalRequests || undefined
                  });
                  activeStreams.delete(streamId);
              }
@@ -1211,5 +1365,8 @@ function stopChatStream(streamId) {
         }
     }
 }
+
+// NOTE: handleMcpApprovalResponse removed - Groq does not yet support mcp_approval_response
+// When Groq adds support, this function can be re-implemented to handle approval flow
 
 module.exports = { handleChatStream, stopChatStream };

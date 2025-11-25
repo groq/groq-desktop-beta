@@ -622,7 +622,15 @@ function App() {
         return { status: 'cancelled', toolResponseMessages };
       }
 
+      // Skip remote MCP tool calls - they are executed server-side by Groq
+      // and their results are already handled via pre_calculated_tool_responses
+      // Remote MCP tools have server_label set (mcp_call events set this in chatHandler)
       const toolName = toolCall.function.name;
+      if (toolCall.server_label) {
+        console.log(`Tool '${toolName}' is a remote MCP tool (server: ${toolCall.server_label}). Skipping client-side execution.`);
+        continue;
+      }
+
       const approvalStatus = getToolApprovalStatus(toolName);
 
       if (approvalStatus === 'always' || approvalStatus === 'yolo') {
@@ -837,8 +845,26 @@ function App() {
             });
         });
 
+        // Handle MCP approval requests (remote MCP tools requiring user approval)
+        streamHandler.onMcpApprovalRequest((approvalRequest) => {
+            console.log('Received MCP approval request:', approvalRequest);
+            // Store in finalAssistantData to be processed after stream completes
+            if (!finalAssistantData.mcpApprovalRequests) {
+                finalAssistantData.mcpApprovalRequests = [];
+            }
+            finalAssistantData.mcpApprovalRequests.push({
+                ...approvalRequest,
+                type: 'mcp_approval_request' // Mark type for handleToolApproval
+            });
+        });
+
         // Handle compound-beta tool execution streaming
         streamHandler.onToolExecution(({ type, tool }) => {
+            // Ensure liveExecutedTools is an array (defensive against race conditions with onComplete)
+            if (!Array.isArray(finalAssistantData.liveExecutedTools)) {
+                finalAssistantData.liveExecutedTools = [];
+            }
+            
             if (type === 'start') {
                 // Add or update tool in live list
                 const updatedLiveTools = [...finalAssistantData.liveExecutedTools];
@@ -855,25 +881,40 @@ function App() {
             } else if (type === 'complete') {
                 // Update tool with complete data including output
                 const updatedLiveTools = [...finalAssistantData.liveExecutedTools];
-                const existingIndex = updatedLiveTools.findIndex(t => t.index === tool.index);
+                // Try to match by index first, then by name as fallback
+                let existingIndex = updatedLiveTools.findIndex(t => t.index === tool.index);
+                if (existingIndex === -1 && tool.name) {
+                    // Fallback: find by name if index doesn't match
+                    existingIndex = updatedLiveTools.findIndex(t => t.name === tool.name && !t.output);
+                }
                 
                 if (existingIndex !== -1) {
-                    // Replace with complete tool data from backend
-                    updatedLiveTools[existingIndex] = tool;
+                    // Merge complete data with existing tool to preserve properties like type, arguments
+                    updatedLiveTools[existingIndex] = { 
+                        ...updatedLiveTools[existingIndex], 
+                        ...tool,
+                        // Ensure output is set (this is the key property for completion)
+                        output: tool.output 
+                    };
                     finalAssistantData.liveExecutedTools = updatedLiveTools;
                 } else {
                     // Handle case where complete event arrives before start (shouldn't happen but defensive)
-                    console.warn(`Received complete event for tool index ${tool.index} without corresponding start event`);
+                    console.warn(`Received complete event for tool ${tool.name} (index ${tool.index}) without corresponding start event`);
                     updatedLiveTools.push(tool);
                     finalAssistantData.liveExecutedTools = updatedLiveTools;
                 }
             }
             
+            // Double-check before spreading (extra safety)
+            const toolsToSet = Array.isArray(finalAssistantData.liveExecutedTools) 
+                ? [...finalAssistantData.liveExecutedTools] 
+                : [];
+            
             setMessages(prev => {
                 const newMessages = [...prev];
                 const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
                 if (idx !== -1) {
-                    newMessages[idx] = { ...newMessages[idx], liveExecutedTools: [...finalAssistantData.liveExecutedTools] };
+                    newMessages[idx] = { ...newMessages[idx], liveExecutedTools: toolsToSet };
                 }
                 return newMessages;
             });
@@ -901,7 +942,10 @@ function App() {
                     reasoningSummaries: finalAssistantData.reasoningSummaries,
                     reasoningDuration: reasoningDuration,
                     usage: data.usage,
-                    pre_calculated_tool_responses: data.pre_calculated_tool_responses
+                    pre_calculated_tool_responses: data.pre_calculated_tool_responses,
+                    // MCP approval requests from server
+                    mcp_approval_requests: data.mcp_approval_requests || finalAssistantData.mcpApprovalRequests,
+                    finish_reason: data.finish_reason
                 };
                 turnAssistantMessage = finalAssistantData; // Store the completed message
 
@@ -997,7 +1041,12 @@ function App() {
             }
 
             // Check for unhandled tool calls
-            const unhandledToolCalls = turnAssistantMessage.tool_calls.filter(tc => !handledIds.has(tc.id));
+            // Filter out:
+            // 1. Tool calls that have pre-calculated responses (already in handledIds)
+            // 2. Remote MCP tool calls (have server_label set) - these are executed server-side by Groq
+            const unhandledToolCalls = turnAssistantMessage.tool_calls.filter(tc => {
+                return !handledIds.has(tc.id) && !tc.server_label;
+            });
             
             if (unhandledToolCalls.length > 0) {
                 // Create a proxy message with only unhandled tool calls for the processor
@@ -1033,6 +1082,9 @@ function App() {
              // No tools, this turn is complete
             currentTurnStatus = 'completed_no_tools';
         }
+
+        // NOTE: MCP approval request handling removed - Groq only supports require_approval: "never"
+        // When Groq adds support for mcp_approval_response, re-enable this code
 
     } catch (error) {
       console.error('Error in executeChatTurn:', error);
@@ -1348,13 +1400,16 @@ function App() {
           console.error("handleToolApproval called with invalid toolCall:", toolCall);
           return;
       }
-      console.log(`User choice for tool '${toolCall.function.name}': ${choice}`);
-
-      // Update localStorage based on choice
-      setToolApprovalStatus(toolCall.function.name, choice);
+      
+      const toolName = toolCall.function?.name;
+      
+      console.log(`User choice for tool '${toolName}': ${choice}`);
 
       // Clear the pending call *before* executing/resuming
       setPendingApprovalCall(null);
+
+      // Update localStorage based on choice
+      setToolApprovalStatus(toolName, choice);
 
       let handledToolResponse;
 
@@ -1370,16 +1425,16 @@ function App() {
       } else { // 'once', 'always', 'yolo' -> Execute the tool
           setLoading(true); // Show loading specifically for tool execution phase
           try {
-              console.log(`Executing tool '${toolCall.function.name}' after user approval...`);
+              console.log(`Executing tool '${toolName}' after user approval...`);
               handledToolResponse = await executeToolCall(toolCall);
               setMessages(prev => [...prev, handledToolResponse]); // Show result in UI
               // Resume processing potential subsequent tools
               await resumeChatFlow(handledToolResponse);
           } catch (error) {
-              console.error(`Error executing approved tool call '${toolCall.function.name}':`, error);
+              console.error(`Error executing approved tool call '${toolName}':`, error);
               handledToolResponse = {
                   role: 'tool',
-                  content: JSON.stringify({ error: `Error executing tool '${toolCall.function.name}' after approval: ${error.message}` }),
+                  content: JSON.stringify({ error: `Error executing tool '${toolName}' after approval: ${error.message}` }),
                   tool_call_id: toolCall.id
               };
               setMessages(prev => [...prev, handledToolResponse]); // Show error in UI
