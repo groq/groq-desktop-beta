@@ -1,4 +1,5 @@
 const Groq = require('groq-sdk');
+const fetch = require('node-fetch');
 const { pruneMessageHistory } = require('./messageUtils');
 const { supportsBuiltInTools } = require('../shared/models');
 
@@ -33,17 +34,74 @@ function checkVisionSupport(messages, modelInfo, modelToUse, event) {
     return true; // Return true to indicate vision check passed
 }
 
-function prepareTools(discoveredTools) {
+function prepareTools(discoveredTools, isResponsesApi = false) {
     // Prepare tools for the API call
-    const tools = (discoveredTools || []).map(tool => ({
-        type: "function",
-        function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.input_schema || {} // Ensure parameters is an object
+    const tools = (discoveredTools || []).map(tool => {
+        if (!tool.name) {
+            console.warn('[ChatHandler] Warning: Tool missing name:', tool);
         }
-    }));
-    console.log(`Prepared ${tools.length} tools for the API call.`);
+
+        // Sanitize schema: Reconstruction Strategy
+        // Instead of copying, we rebuild the schema from scratch with only known-safe fields.
+        let safeSchema = {
+            type: "object",
+            properties: {}
+            // Removed 'required' init here to add it only if needed
+            // Removed 'additionalProperties' to be less strict/prone to validation errors
+        };
+
+        if (tool.input_schema) {
+             try {
+                 const schema = tool.input_schema;
+                 
+
+                 // Rebuild properties
+                 if (schema.properties && typeof schema.properties === 'object' && schema.properties !== null) {
+                     for (const [key, value] of Object.entries(schema.properties)) {
+                         if (value && typeof value === 'object') {
+                             // Only copy specific allowed fields for property definition
+                             safeSchema.properties[key] = {};
+                             if (value.type) safeSchema.properties[key].type = value.type;
+                             if (value.description) safeSchema.properties[key].description = value.description;
+                             if (value.enum) safeSchema.properties[key].enum = value.enum;
+                             // Helper for integer/number constraints
+                             if (value.minimum !== undefined) safeSchema.properties[key].minimum = value.minimum;
+                             if (value.maximum !== undefined) safeSchema.properties[key].maximum = value.maximum;
+                         }
+                     }
+                 }
+
+                 // Rebuild required only if it has items
+                 if (Array.isArray(schema.required) && schema.required.length > 0) {
+                     safeSchema.required = [...schema.required];
+                 }
+
+             } catch (e) {
+                 console.error('[ChatHandler] Error sanitizing tool schema:', e);
+                 safeSchema = { type: "object", properties: {} };
+             }
+        }
+
+        if (isResponsesApi) {
+            // Groq Responses API (beta) expects a flat structure
+            return {
+                type: "function",
+                name: tool.name || "unknown_tool",
+                description: tool.description || "",
+                parameters: safeSchema
+            };
+        } else {
+            // Standard Chat Completions API expects nested function object
+            return {
+                type: "function",
+                function: {
+                    name: tool.name || "unknown_tool",
+                    description: tool.description || "",
+                    parameters: safeSchema
+                }
+            };
+        }
+    });
     return tools;
 }
 
@@ -122,11 +180,9 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
     if (supportsBuiltInTools(modelToUse, modelContextSizes) && settings.builtInTools) {
         if (settings.builtInTools.codeInterpreter) {
             builtInTools.push({ type: "code_interpreter" });
-            console.log('Code interpreter tool enabled for model:', modelToUse);
         }
         if (settings.builtInTools.browserSearch) {
             builtInTools.push({ type: "browser_search" });
-            console.log('Browser search tool enabled for model:', modelToUse);
         }
     }
 
@@ -144,7 +200,7 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
     const shouldIncludeTools = allTools.length > 0 && !isCompoundModel;
     
     if (isCompoundModel && allTools.length > 0) {
-        console.log(`Skipping tools for compound model: ${modelToUse}`);
+        // Tools skipped for compound models
     }
 
     const apiParams = {
@@ -159,7 +215,6 @@ function buildApiParams(prunedMessages, modelToUse, settings, tools, modelContex
     // Add reasoning_effort parameter for gpt-oss models
     if (modelToUse.includes('gpt-oss') && settings.reasoning_effort) {
         apiParams.reasoning_effort = settings.reasoning_effort;
-        console.log(`Adding reasoning_effort: ${settings.reasoning_effort} for model: ${modelToUse}`);
     }
 
     return apiParams;
@@ -197,7 +252,6 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
             if (streamInfo) {
                 streamInfo.summaryInterval = null;
             }
-            console.log('[Backend] First content token received, cleared summary interval');
         }
     }
 
@@ -216,10 +270,7 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
         // Start interval timer on first reasoning chunk
         if (!accumulatedData.summaryInterval) {
             // Check if thinking summaries are disabled
-            if (settings?.disableThinkingSummaries) {
-                console.log('[Backend] Thinking summaries disabled, skipping summary interval setup');
-            } else {
-                console.log('[Backend] First reasoning chunk, starting summary interval');
+            if (!settings?.disableThinkingSummaries) {
                 accumulatedData.lastSummarizedTime = Date.now();
                 
                 // Set up interval to check every 2 seconds
@@ -227,7 +278,6 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
                 // Check if stream is still active before triggering summarization
                 const currentStreamInfo = activeStreams.get(streamId);
                 if (!currentStreamInfo || currentStreamInfo.cancelled) {
-                    console.log(`[Backend] Interval check: Stream ${streamId} no longer active, stopping interval`);
                     if (accumulatedData.summaryInterval) {
                         clearInterval(accumulatedData.summaryInterval);
                         accumulatedData.summaryInterval = null;
@@ -241,8 +291,6 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
                 if (timeSinceLastSummary >= 2000 && accumulatedData.reasoning.length > 0) {
                     accumulatedData.lastSummarizedTime = now;
                     accumulatedData.summaryCount++;
-                    
-                    console.log(`[Backend] Interval triggered summary ${accumulatedData.summaryCount}, reasoning length: ${accumulatedData.reasoning.length}`);
                     
                     // Get the last 300 words for summarization
                     const last300Words = getLastNWords(accumulatedData.reasoning, 300);
@@ -278,11 +326,6 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
                     search_results: executedTool.search_results || null
                 };
                 accumulatedData.executedTools.push(newTool);
-                
-                console.log(`[Tool Execution Start] Index: ${executedTool.index}, Type: ${executedTool.type}, Name: ${executedTool.name}`);
-                if (executedTool.arguments) {
-                    console.log(`[Tool Arguments] Index: ${executedTool.index}:`, executedTool.arguments);
-                }
 
                 event.sender.send('chat-stream-tool-execution', {
                     type: 'start',
@@ -313,12 +356,6 @@ function processStreamChunk(chunk, event, accumulatedData, groq, streamId, setti
                 if (executedTool.search_results) existingTool.search_results = executedTool.search_results;
                 if (executedTool.output !== undefined) {
                     existingTool.output = executedTool.output;
-                    
-                    console.log(`[Tool Execution Complete] Index: ${existingTool.index}, Type: ${existingTool.type}, Name: ${existingTool.name}`);
-                    console.log(`[Tool Arguments Preserved] Index: ${existingTool.index}:`, existingTool.arguments);
-                    if (existingTool.output) {
-                        console.log(`[Tool Output] Index: ${existingTool.index}:`, existingTool.output.substring(0, 200) + (existingTool.output.length > 200 ? '...' : ''));
-                    }
                     
                     // Send complete event with fully updated tool data
                     event.sender.send('chat-stream-tool-execution', {
@@ -372,7 +409,6 @@ function handleStreamCompletion(event, accumulatedData, finishReason, streamId) 
         if (streamInfo) {
             streamInfo.summaryInterval = null;
         }
-        console.log('[Backend] Cleared summary interval on completion');
     }
     
     const completionData = {
@@ -384,8 +420,6 @@ function handleStreamCompletion(event, accumulatedData, finishReason, streamId) 
         finish_reason: finishReason,
         usage: accumulatedData.usage
     };
-    
-    console.log(`[Backend] Stream ${streamId} complete: finish_reason=${finishReason}, content_length=${accumulatedData.content.length}, tool_calls=${accumulatedData.toolCalls.length}, reasoning_length=${accumulatedData.reasoning.length}`);
     
     event.sender.send('chat-stream-complete', completionData);
 }
@@ -404,8 +438,6 @@ function getLastNWords(text, n) {
 // Summarize reasoning chunk using llama-3.1-8b-instant (non-blocking)
 async function summarizeReasoningChunk(groq, reasoningText, event, streamId, summaryIndex) {
     try {
-        console.log(`[Backend Summary ${summaryIndex}] Starting summarization for stream ${streamId}, text length: ${reasoningText.length}`);
-        
         const response = await groq.chat.completions.create({
             messages: [
                 {
@@ -426,13 +458,10 @@ async function summarizeReasoningChunk(groq, reasoningText, event, streamId, sum
         // Check if stream is still active before sending results
         const streamInfo = activeStreams.get(streamId);
         if (!streamInfo || streamInfo.cancelled) {
-            console.log(`[Backend Summary ${summaryIndex}] Stream ${streamId} no longer active, discarding summary`);
             return;
         }
         
         const summary = response.choices[0]?.message?.content?.trim() || 'Processing thoughts';
-        console.log(`[Backend Summary ${summaryIndex}] Completed: "${summary}"`);
-        console.log(`[Backend Summary ${summaryIndex}] Sending to frontend via chat-stream-reasoning-summary`);
         
         // Send the summary to the frontend with streamId and index
         event.sender.send('chat-stream-reasoning-summary', {
@@ -448,7 +477,6 @@ async function summarizeReasoningChunk(groq, reasoningText, event, streamId, sum
         // Check if stream is still active before sending error fallback
         const streamInfo = activeStreams.get(streamId);
         if (!streamInfo || streamInfo.cancelled) {
-            console.log(`[Backend Summary ${summaryIndex}] Stream ${streamId} no longer active, discarding error fallback`);
             return;
         }
         
@@ -472,7 +500,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
         // Clear any existing interval from previous retry
         const streamInfo = activeStreams.get(streamId);
         if (streamInfo && streamInfo.summaryInterval) {
-            console.log('[Backend] Clearing interval from previous retry');
             clearInterval(streamInfo.summaryInterval);
             streamInfo.summaryInterval = null;
         }
@@ -495,7 +522,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
 
             // Check if stream was cancelled before starting
             if (!streamInfo || streamInfo.cancelled) {
-                console.log(`Stream ${streamId} was cancelled before starting`);
                 event.sender.send('chat-stream-cancelled', { streamId });
                 activeStreams.delete(streamId);
                 return;
@@ -512,7 +538,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 // Check if stream was cancelled during iteration
                 const currentStreamInfo = activeStreams.get(streamId);
                 if (!currentStreamInfo || currentStreamInfo.cancelled) {
-                    console.log(`Stream ${streamId} was cancelled during processing`);
                     // Clear summary interval if it exists
                     if (accumulatedData.summaryInterval) {
                         clearInterval(accumulatedData.summaryInterval);
@@ -520,7 +545,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                         if (currentStreamInfo) {
                             currentStreamInfo.summaryInterval = null;
                         }
-                        console.log('[Backend] Cleared summary interval on cancellation');
                     }
                     event.sender.send('chat-stream-cancelled', { streamId });
                     activeStreams.delete(streamId);
@@ -544,7 +568,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 if (streamInfo) {
                     streamInfo.summaryInterval = null;
                 }
-                console.log('[Backend] Cleared summary interval on unexpected end');
             }
             
             activeStreams.delete(streamId);
@@ -555,7 +578,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
             // Check if this was a cancellation
             const streamInfo = activeStreams.get(streamId);
             if (streamInfo && streamInfo.cancelled) {
-                console.log(`Stream ${streamId} error due to cancellation`);
                 // Clear summary interval
                 if (accumulatedData.summaryInterval) {
                     clearInterval(accumulatedData.summaryInterval);
@@ -563,7 +585,6 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                     if (streamInfo) {
                         streamInfo.summaryInterval = null;
                     }
-                    console.log('[Backend] Cleared summary interval on error cancellation');
                 }
                 event.sender.send('chat-stream-cancelled', { streamId });
                 activeStreams.delete(streamId);
@@ -577,11 +598,9 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
 
             if ((isToolUseFailedError || isToolValidationError) && retryCount < MAX_TOOL_USE_RETRIES) {
                 retryCount++;
-                console.log(`Retrying due to tool error (attempt ${retryCount}/${MAX_TOOL_USE_RETRIES}): ${errorMessage}`);
                 
                 // Bump temperature by 0.05 per retry
                 chatCompletionParams.temperature = baseTemperature + (retryCount * 0.05);
-                console.log(`Adjusted temperature to ${chatCompletionParams.temperature} for retry ${retryCount}`);
                 
                 // Notify client of retry attempt
                 event.sender.send('chat-stream-retry', {
@@ -646,6 +665,444 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
     });
 }
 
+function handleResponsesApiEvent(data, event, streamId) {
+    switch (data.type) {
+        case 'response.output_text.delta':
+            event.sender.send('chat-stream-content', { content: data.delta });
+            break;
+        case 'response.output_item.added':
+            if (data.item.type === 'mcp_call') {
+                event.sender.send('chat-stream-tool-execution', {
+                    type: 'start',
+                    tool: {
+                        index: data.output_index,
+                        type: 'function',
+                        name: data.item.name,
+                        arguments: data.item.arguments || "",
+                        server_label: data.item.server_label
+                    }
+                });
+            }
+            break;
+        case 'response.output_item.done':
+            if (data.item.type === 'mcp_call') {
+                event.sender.send('chat-stream-tool-execution', {
+                    type: 'complete',
+                    tool: {
+                        index: data.output_index,
+                        name: data.item.name,
+                        output: data.item.output
+                    }
+                });
+            }
+            break;
+    }
+}
+
+async function handleResponsesApiStream(event, messages, model, settings, modelContextSizes, discoveredTools) {
+    const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+        activeStreams.set(streamId, {
+            cancelled: false,
+            stream: null, 
+            event: event,
+            summaryInterval: null
+        });
+
+        validateApiKey(settings);
+        const { modelToUse } = determineModel(model, settings, modelContextSizes);
+
+        // Prepare Connectors
+        const tools = [];
+        if (settings.googleConnectors?.gmail && settings.googleOAuthToken) {
+            tools.push({
+                type: "mcp",
+                server_label: "gmail",
+                connector_id: "connector_gmail",
+                authorization: settings.googleOAuthToken,
+                require_approval: "never"
+            });
+        }
+        if (settings.googleConnectors?.calendar && settings.googleOAuthToken) {
+            tools.push({
+                type: "mcp",
+                server_label: "google_calendar",
+                connector_id: "connector_googlecalendar",
+                authorization: settings.googleOAuthToken,
+                require_approval: "never"
+            });
+        }
+        if (settings.googleConnectors?.drive && settings.googleOAuthToken) {
+            tools.push({
+                type: "mcp",
+                server_label: "google_drive",
+                connector_id: "connector_googledrive",
+                authorization: settings.googleOAuthToken,
+                require_approval: "never"
+            });
+        }
+
+        // Add discoveredTools (Client-side tools)
+        if (discoveredTools && discoveredTools.length > 0) {
+            const clientTools = prepareTools(discoveredTools, true); // true = isResponsesApi
+            tools.push(...clientTools);
+        }
+
+        // Prepare Input and Instructions
+        let instructions = undefined;
+        const input = [];
+        
+        // Helper to find tool output
+        const findToolOutput = (id) => messages.find(m => m.role === 'tool' && m.tool_call_id === id);
+
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+
+            if (msg.role === 'system') {
+                instructions = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+                continue;
+            }
+
+            if (msg.role === 'tool') {
+                continue; // Skip, handled via assistant message
+            }
+
+            if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+                // 1. Add text content if present
+                let contentText = "";
+                if (typeof msg.content === 'string') {
+                    contentText = msg.content;
+                } else if (Array.isArray(msg.content)) {
+                    contentText = msg.content.map(p => p.text || "").join("");
+                }
+                
+                if (contentText) {
+                    input.push({
+                        role: 'assistant',
+                        content: contentText
+                    });
+                }
+
+                // 2. Add tool calls
+                for (const toolCall of msg.tool_calls) {
+                    const outputMsg = findToolOutput(toolCall.id);
+                    const outputContent = outputMsg ? (typeof outputMsg.content === 'string' ? outputMsg.content : JSON.stringify(outputMsg.content)) : undefined;
+
+                    if (toolCall.server_label) {
+                        // MCP Call
+                        const mcpItem = {
+                            type: "mcp_call",
+                            id: toolCall.id, // Use the ID we have
+                            name: toolCall.function.name,
+                            arguments: toolCall.function.arguments,
+                            server_label: toolCall.server_label,
+                        };
+                        
+                        if (outputContent) {
+                            mcpItem.status = "completed";
+                            mcpItem.output = outputContent;
+                        }
+                        
+                        input.push(mcpItem);
+                    } else {
+                        // Standard Function Call
+                        input.push({
+                            type: "function_call",
+                            id: toolCall.id,
+                            call_id: toolCall.id,
+                            name: toolCall.function.name,
+                            arguments: toolCall.function.arguments
+                        });
+                        
+                        if (outputContent) {
+                            input.push({
+                                type: "function_call_output",
+                                call_id: toolCall.id,
+                                output: outputContent
+                            });
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Standard message
+            let contentText = "";
+            if (typeof msg.content === 'string') {
+                contentText = msg.content;
+            } else if (Array.isArray(msg.content)) {
+                contentText = msg.content.map(p => p.text || "").join("");
+            }
+            
+            input.push({
+                role: msg.role,
+                content: contentText
+            });
+        }
+
+        const apiParams = {
+            model: modelToUse,
+            stream: true,
+            input: input,
+            tools: tools.length > 0 ? tools : undefined,
+            instructions: instructions,
+            store: false // Groq Responses API does not support stateful conversations yet
+        };
+
+        const body = JSON.stringify(apiParams);
+
+        const response = await fetch("https://api.groq.com/openai/v1/responses", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${settings.GROQ_API_KEY}`,
+                "Groq-Beta": "inference-metrics"
+            },
+            body: body
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API Error ${response.status}: ${errText}`);
+        }
+
+        event.sender.send('chat-stream-start', {
+            id: streamId,
+            role: "assistant"
+        });
+
+        let accumulatedContent = "";
+        let accumulatedReasoning = ""; // Track reasoning
+        let buffer = "";
+        const stream = response.body;
+        
+        // Track errors and failures
+        const accumulatedData = {
+            error: null,
+            failed: false,
+            failureReason: null
+        };
+        
+        // Store stream for cancellation (if supported by node-fetch/stream)
+        // We can't easily abort node-fetch v2 without AbortController (Node 15+)
+        // But we can destroy the stream.
+        if (activeStreams.get(streamId)) {
+            activeStreams.get(streamId).stream = stream;
+        }
+
+        const toolCallsMap = new Map(); // id -> toolCall object
+        const toolOutputsMap = new Map(); // id -> output
+
+        stream.on('data', (chunk) => {
+            if (activeStreams.get(streamId)?.cancelled) {
+                stream.destroy(); // Stop stream
+                return;
+            }
+            
+            buffer += chunk.toString();
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop(); 
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const jsonStr = line.substring(6);
+                    if (jsonStr.trim() === '[DONE]') continue;
+                    
+                    try {
+                        const data = JSON.parse(jsonStr);
+
+                        // Inline handling to access accumulators
+                        switch (data.type) {
+                            case 'error':
+                                console.error('[Responses API] Error event received:', data);
+                                // Store error for later handling
+                                accumulatedData.error = data.error || data.message || 'Unknown error';
+                                break;
+                                
+                            case 'response.failed':
+                                console.error('[Responses API] Response failed:', data);
+                                // Store failure details
+                                accumulatedData.failed = true;
+                                accumulatedData.failureReason = data.response?.error?.message || 'Response generation failed';
+                                break;
+                            
+                            case 'response.output_text.delta':
+                                accumulatedContent += data.delta;
+                                event.sender.send('chat-stream-content', { content: data.delta });
+                                break;
+
+                            case 'response.reasoning_text.delta':
+                                accumulatedReasoning += data.delta;
+                                event.sender.send('chat-stream-reasoning', { 
+                                    reasoning: data.delta, 
+                                    accumulated: accumulatedReasoning 
+                                });
+                                break;
+                                
+                            case 'response.output_item.added':
+                                if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                    const toolCall = {
+                                        index: data.output_index,
+                                        id: data.item.id,
+                                        type: 'function',
+                                        function: {
+                                            name: data.item.name,
+                                            arguments: data.item.arguments || ""
+                                        },
+                                        // Extra fields for UI if needed, but strip for standard history
+                                        server_label: data.item.server_label
+                                    };
+                                    toolCallsMap.set(data.item.id, toolCall);
+                                    
+                                    // Emit tool execution start for "compound" style UI (optional but good for consistency)
+                                    event.sender.send('chat-stream-tool-execution', {
+                                        type: 'start',
+                                        tool: {
+                                            index: data.output_index,
+                                            type: 'function',
+                                            name: data.item.name,
+                                            arguments: data.item.arguments || "",
+                                            server_label: data.item.server_label
+                                        }
+                                    });
+                                    
+                                    // Emit standard tool calls update
+                                    event.sender.send('chat-stream-tool-calls', { 
+                                        tool_calls: Array.from(toolCallsMap.values()) 
+                                    });
+                                }
+                                break;
+                                
+                            case 'response.mcp_call_arguments.delta':
+                            case 'response.function_call_arguments.delta':
+                                if (toolCallsMap.has(data.item_id)) {
+                                    const tc = toolCallsMap.get(data.item_id);
+                                    tc.function.arguments += data.delta;
+                                    // Update map
+                                    toolCallsMap.set(data.item_id, tc);
+                                    // Re-emit tool calls
+                                    event.sender.send('chat-stream-tool-calls', { 
+                                        tool_calls: Array.from(toolCallsMap.values()) 
+                                    });
+                                } else {
+                                    console.warn(`[Responses API] Received delta for unknown tool call: ${data.item_id}`);
+                                }
+                                break;
+                                
+                            case 'response.output_item.done':
+                                if (data.item.type === 'mcp_call' || data.item.type === 'function_call') {
+                                    // Robustness: Ensure tool call exists in map even if 'added' was missed
+                                    if (!toolCallsMap.has(data.item.id)) {
+                                        toolCallsMap.set(data.item.id, {
+                                            index: data.output_index,
+                                            id: data.item.id,
+                                            type: 'function',
+                                            function: {
+                                                name: data.item.name,
+                                                arguments: data.item.arguments || ""
+                                            },
+                                            server_label: data.item.server_label
+                                        });
+                                    }
+
+                                    // Ensure final arguments are set
+                                    if (toolCallsMap.has(data.item.id)) {
+                                        const tc = toolCallsMap.get(data.item.id);
+                                        // Prefer complete arguments from item if available
+                                        if (data.item.arguments) {
+                                            tc.function.arguments = data.item.arguments;
+                                        }
+                                        toolCallsMap.set(data.item.id, tc);
+                                    }
+                                    
+                                    // Capture output (only for MCP calls - they return outputs)
+                                    if (data.item.output) {
+                                        toolOutputsMap.set(data.item.id, data.item.output);
+                                        
+                                        // Only emit completion event if there's an actual output
+                                        // (MCP calls have outputs, client-side function calls don't)
+                                        event.sender.send('chat-stream-tool-execution', {
+                                            type: 'complete',
+                                            tool: {
+                                                index: data.output_index,
+                                                name: data.item.name,
+                                                output: data.item.output
+                                            }
+                                        });
+                                    }
+                                    
+                                    // Re-emit tool calls (final state)
+                                    event.sender.send('chat-stream-tool-calls', { 
+                                        tool_calls: Array.from(toolCallsMap.values()) 
+                                    });
+                                }
+                                break;
+                        }
+                        
+                    } catch (e) {
+                        console.error('[Responses API] JSON Parse Error:', e);
+                        console.error('[Responses API] Bad JSON:', jsonStr);
+                    }
+                }
+            }
+        });
+
+        stream.on('end', () => {
+             if (!activeStreams.get(streamId)?.cancelled) {
+                 // Check for errors or failures first
+                 if (accumulatedData.error || accumulatedData.failed) {
+                     const errorMessage = accumulatedData.error || accumulatedData.failureReason || 'Response generation failed';
+                     console.error('[Responses API] Stream ended with error:', errorMessage);
+                     event.sender.send('chat-stream-error', { error: errorMessage });
+                     activeStreams.delete(streamId);
+                     return;
+                 }
+                 
+                 // Prepare tool responses list (only for MCP calls that returned outputs)
+                 const toolResponses = [];
+                 toolOutputsMap.forEach((output, id) => {
+                     toolResponses.push({
+                         tool_call_id: id,
+                         content: typeof output === 'string' ? output : JSON.stringify(output)
+                     });
+                 });
+
+                 // Determine finish_reason:
+                 // - If we have tool calls without outputs, it means client needs to execute them -> "tool_calls"
+                 // - If we have tool calls with outputs (MCP), they're already done -> "stop"
+                 // - If no tool calls, normal completion -> "stop"
+                 let finishReason = "stop";
+                 if (toolCallsMap.size > 0 && toolOutputsMap.size === 0) {
+                     // Client-side tools that need execution
+                     finishReason = "tool_calls";
+                 }
+
+                 event.sender.send('chat-stream-complete', {
+                     content: accumulatedContent,
+                     role: "assistant",
+                     finish_reason: finishReason,
+                     tool_calls: toolCallsMap.size > 0 ? Array.from(toolCallsMap.values()) : undefined,
+                     pre_calculated_tool_responses: toolResponses.length > 0 ? toolResponses : undefined,
+                     reasoning: accumulatedReasoning || undefined
+                 });
+                 activeStreams.delete(streamId);
+             }
+        });
+        
+        stream.on('error', (err) => {
+             if (!activeStreams.get(streamId)?.cancelled) {
+                 event.sender.send('chat-stream-error', { error: err.message });
+                 activeStreams.delete(streamId);
+             }
+        });
+
+    } catch (error) {
+        activeStreams.delete(streamId);
+        event.sender.send('chat-stream-error', { error: error.message });
+    }
+}
+
 /**
  * Handles streaming chat completions with support for compound-beta model features.
  * Supports progressive reasoning display, executed tools streaming, and MCP tool calls.
@@ -658,6 +1115,11 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
  * @param {Array<object>} discoveredTools - Available MCP tools
  */
 async function handleChatStream(event, messages, model, settings, modelContextSizes, discoveredTools) {
+    // Check if Responses API should be used
+    if (settings.useResponsesApi) {
+        return handleResponsesApiStream(event, messages, model, settings, modelContextSizes, discoveredTools);
+    }
+
     // Generate unique stream ID
     const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -685,7 +1147,6 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         // Use custom API base URL if enabled and provided (use exactly as provided)
         if (settings.customApiBaseUrlEnabled && settings.customApiBaseUrl && settings.customApiBaseUrl.trim()) {
             groqConfig.baseURL = settings.customApiBaseUrl.trim();
-            console.log(`Using custom base URL: ${groqConfig.baseURL}`);
         }
         
         const groq = new Groq(groqConfig);
@@ -698,15 +1159,11 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
             
             // Intercept buildURL to strip /openai/v1/ prefix since custom baseURL includes the full path
             groq.buildURL = function(path, query, defaultBaseURL) {
-                const originalPath = path;
                 // Strip the /openai/v1/ prefix - custom baseURL should include the full path up to /v1/
                 if (path.startsWith('/openai/v1/')) {
                     path = path.replace(/^\/openai\/v1/, '');
-                    console.log(`[URL Rewrite] Original path: ${originalPath} -> New path: ${path}`);
                 }
-                const finalURL = originalBuildURL(path, query, defaultBaseURL);
-                console.log(`[Final URL] ${finalURL}`);
-                return finalURL;
+                return originalBuildURL(path, query, defaultBaseURL);
             };
             
             groq.post = function(path, ...args) {
@@ -734,26 +1191,22 @@ function stopChatStream(streamId) {
     if (streamId) {
         const streamInfo = activeStreams.get(streamId);
         if (streamInfo) {
-            console.log(`Stopping stream ${streamId}`);
             streamInfo.cancelled = true;
             // Clear the summary interval if it exists
             if (streamInfo.summaryInterval) {
                 clearInterval(streamInfo.summaryInterval);
                 streamInfo.summaryInterval = null;
-                console.log(`[Backend] Cleared summary interval for stream ${streamId}`);
             }
             // Note: The actual stream interruption happens in the iteration loop
         }
     } else {
         // Stop all active streams
-        console.log(`Stopping all active streams (${activeStreams.size} total)`);
         for (const [id, streamInfo] of activeStreams.entries()) {
             streamInfo.cancelled = true;
             // Clear the summary interval if it exists
             if (streamInfo.summaryInterval) {
                 clearInterval(streamInfo.summaryInterval);
                 streamInfo.summaryInterval = null;
-                console.log(`[Backend] Cleared summary interval for stream ${id}`);
             }
         }
     }

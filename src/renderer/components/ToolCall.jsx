@@ -38,7 +38,7 @@ function ToolCall({ toolCall, toolResult }) {
 
   if (!toolCall) return null;
 
-  const { function: func } = toolCall;
+  const { function: func, server_label } = toolCall;
   const functionName = func.name;
   const formattedName = formatFunctionName(functionName);
   let args = {};
@@ -60,7 +60,7 @@ function ToolCall({ toolCall, toolResult }) {
         >
           <div className="flex items-center">
             <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2.5 py-0.5 rounded-full mr-2">
-              Tool
+              {server_label ? `${server_label}` : 'Tool'}
             </span>
             <span className="text-sm font-normal">{formattedName}</span>
             {isPending && !isExpanded && (

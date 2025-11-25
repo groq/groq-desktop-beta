@@ -734,7 +734,7 @@ function App() {
         // Start streaming chat
         const streamHandler = window.electron.startChatStream(turnMessages, selectedModel);
 
-        // Collect the final message data
+            // Collect the final message data
         let finalAssistantData = {
             role: 'assistant',
             content: '',
@@ -745,7 +745,8 @@ function App() {
             liveExecutedTools: [],
             reasoningSummaries: [],
             reasoningStartTime: null,
-            reasoningDuration: null
+            reasoningDuration: null,
+            pre_calculated_tool_responses: undefined
         };
 
         // Setup event handlers for streaming
@@ -757,7 +758,6 @@ function App() {
             // If this is the first content token and we have reasoning, mark reasoning as complete
             if (finalAssistantData.content === content && finalAssistantData.reasoningStartTime && !finalAssistantData.reasoningDuration) {
                 finalAssistantData.reasoningDuration = Math.round((Date.now() - finalAssistantData.reasoningStartTime) / 1000);
-                console.log('[Frontend] First content token received, reasoning complete. Duration:', finalAssistantData.reasoningDuration);
             }
             
             setMessages(prev => {
@@ -793,7 +793,6 @@ function App() {
             // Track when reasoning starts and add initial "Thinking" placeholder
             if (!finalAssistantData.reasoningStartTime) {
                 finalAssistantData.reasoningStartTime = Date.now();
-                console.log('[Frontend] Reasoning started, added "Thinking" placeholder');
                 
                 // Add initial "Thinking" placeholder if no summaries yet
                 if (finalAssistantData.reasoningSummaries.length === 0) {
@@ -818,13 +817,10 @@ function App() {
 
         // Handle reasoning summaries
         streamHandler.onReasoningSummary(({ streamId, summaryIndex, summary }) => {
-            console.log(`[Frontend] Received summary ${summaryIndex}: "${summary}"`);
-            
             // Remove the placeholder "Thinking" when first real summary arrives
             if (finalAssistantData.reasoningSummaries.length > 0 && 
                 finalAssistantData.reasoningSummaries[0].isPlaceholder) {
                 finalAssistantData.reasoningSummaries.shift();
-                console.log(`[Frontend] Replaced "Thinking" placeholder`);
             }
             
             finalAssistantData.reasoningSummaries.push({ index: summaryIndex, summary });
@@ -886,8 +882,6 @@ function App() {
         // Handle stream completion
         await new Promise((resolve, reject) => {
             streamHandler.onComplete((data) => {
-                console.log(`[Frontend] Stream complete: finish_reason=${data.finish_reason}, content_length=${data.content?.length || 0}, has_tool_calls=${!!data.tool_calls}, has_reasoning=${!!data.reasoning}`);
-                
                 // Use existing duration if already set, otherwise calculate it now
                 let reasoningDuration = finalAssistantData.reasoningDuration;
                 if (!reasoningDuration && finalAssistantData.reasoningStartTime && data.reasoning) {
@@ -906,7 +900,8 @@ function App() {
                     // Keep the reasoning summaries
                     reasoningSummaries: finalAssistantData.reasoningSummaries,
                     reasoningDuration: reasoningDuration,
-                    usage: data.usage
+                    usage: data.usage,
+                    pre_calculated_tool_responses: data.pre_calculated_tool_responses
                 };
                 turnAssistantMessage = finalAssistantData; // Store the completed message
 
@@ -915,7 +910,6 @@ function App() {
                     const idx = newMessages.findIndex(msg => msg.role === 'assistant' && msg.isStreaming);
                     if (idx !== -1) {
                         newMessages[idx] = finalAssistantData; // Replace placeholder
-                        console.log(`[Frontend] Updated message at index ${idx}`);
                     } else {
                         // Should not happen if placeholder logic is correct
                         console.warn("Streaming placeholder not found for replacement.");
@@ -980,34 +974,65 @@ function App() {
         // Clean up stream handlers
         streamHandler.cleanup();
 
-        console.log(`[Frontend] Turn message received: has_tool_calls=${!!turnAssistantMessage?.tool_calls}, tool_count=${turnAssistantMessage?.tool_calls?.length || 0}, content_length=${turnAssistantMessage?.content?.length || 0}`);
-
         // Check and process tool calls if any
-        if (turnAssistantMessage && turnAssistantMessage.tool_calls?.length > 0) {
-            // IMPORTANT: Pass the messages *before* this assistant message was added
-            const { status: toolProcessingStatus, toolResponseMessages } = await processToolCalls(
-                turnAssistantMessage,
-                turnMessages // Pass the input messages for this turn
-            );
+            if (turnAssistantMessage && turnAssistantMessage.tool_calls?.length > 0) {
+            let handledIds = new Set();
+            let preCalculatedMessages = [];
 
-            turnToolResponses = toolResponseMessages; // Store responses from this turn
+            if (turnAssistantMessage.pre_calculated_tool_responses) {
+                 // Map pre-calculated responses to message format
+                 preCalculatedMessages = turnAssistantMessage.pre_calculated_tool_responses.map(r => ({
+                     role: 'tool',
+                     content: r.content,
+                     tool_call_id: r.tool_call_id
+                 }));
+                 
+                 preCalculatedMessages.forEach(m => handledIds.add(m.tool_call_id));
 
-            if (toolProcessingStatus === 'paused') {
-                currentTurnStatus = 'paused'; // Signal pause to the caller
-            } else if (toolProcessingStatus === 'cancelled') {
-                currentTurnStatus = 'cancelled'; // Signal cancellation to the caller
-            } else if (toolProcessingStatus === 'completed') {
-                 // If tools completed, the caller might loop
-                currentTurnStatus = 'completed_with_tools';
-            } else { // Handle potential errors from processToolCalls if added
-                currentTurnStatus = 'error';
+                 // Update UI with tool results immediately
+                 setMessages(prev => [...prev, ...preCalculatedMessages]);
+                 
+                 // Add to turnToolResponses accumulator
+                 turnToolResponses = [...preCalculatedMessages];
+            }
+
+            // Check for unhandled tool calls
+            const unhandledToolCalls = turnAssistantMessage.tool_calls.filter(tc => !handledIds.has(tc.id));
+            
+            if (unhandledToolCalls.length > 0) {
+                // Create a proxy message with only unhandled tool calls for the processor
+                const proxyAssistantMessage = {
+                    ...turnAssistantMessage,
+                    tool_calls: unhandledToolCalls
+                };
+                
+                // Standard processing: Execute unhandled tools locally
+                // IMPORTANT: Pass the messages *before* this assistant message was added
+                const { status: toolProcessingStatus, toolResponseMessages } = await processToolCalls(
+                    proxyAssistantMessage,
+                    turnMessages // Pass the input messages for this turn
+                );
+    
+                turnToolResponses = [...turnToolResponses, ...toolResponseMessages]; // Combine responses
+    
+                if (toolProcessingStatus === 'paused') {
+                    currentTurnStatus = 'paused'; // Signal pause to the caller
+                } else if (toolProcessingStatus === 'cancelled') {
+                    currentTurnStatus = 'cancelled'; // Signal cancellation to the caller
+                } else if (toolProcessingStatus === 'completed') {
+                     // If tools completed, the caller might loop
+                    currentTurnStatus = 'completed_with_tools';
+                } else { // Handle potential errors from processToolCalls if added
+                    currentTurnStatus = 'error';
+                }
+            } else {
+                 // All tools were handled by server
+                 currentTurnStatus = 'completed_no_tools';
             }
         } else {
              // No tools, this turn is complete
             currentTurnStatus = 'completed_no_tools';
         }
-
-        console.log(`[Frontend] Turn completed with status: ${currentTurnStatus}`);
 
     } catch (error) {
       console.error('Error in executeChatTurn:', error);
@@ -1075,10 +1100,8 @@ function App() {
 
     try {
         while (conversationStatus === 'processing' || conversationStatus === 'completed_with_tools') {
-            console.log(`[Frontend] Starting chat turn with ${currentApiMessages.length} messages`);
             const { status, assistantMessage, toolResponseMessages } = await executeChatTurn(currentApiMessages);
 
-            console.log(`[Frontend] Chat turn returned: status=${status}, has_assistant=${!!assistantMessage}, tool_responses=${toolResponseMessages?.length || 0}`);
             conversationStatus = status; // Update status for loop condition
 
             if (status === 'paused') {
@@ -1124,7 +1147,11 @@ function App() {
             } else if (status === 'completed_no_tools') {
                   // Conversation turn finished without tools
                   // Check if we got an empty response (only reasoning, no content)
-                  if (assistantMessage && (!assistantMessage.content || assistantMessage.content.trim() === '')) {
+                  // Note: Don't treat as empty if there are tool calls (e.g. Responses API might return tool calls with no content if that was the intent)
+                  const hasContent = assistantMessage.content && assistantMessage.content.trim() !== '';
+                  const hasToolCalls = assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0;
+                  
+                  if (assistantMessage && !hasContent && !hasToolCalls) {
                       if (emptyResponseRetries < MAX_EMPTY_RETRIES) {
                           emptyResponseRetries++;
                           console.warn(`[Frontend] Model completed with no content. Retrying (${emptyResponseRetries}/${MAX_EMPTY_RETRIES})...`);
@@ -1138,7 +1165,6 @@ function App() {
                                   .find(({ msg }) => msg.role === 'assistant')?.idx;
                               if (lastAssistantIdx !== undefined) {
                                   newMessages.splice(lastAssistantIdx, 1);
-                                  console.log(`[Frontend] Removed empty assistant message at index ${lastAssistantIdx}`);
                               }
                               return newMessages;
                           });

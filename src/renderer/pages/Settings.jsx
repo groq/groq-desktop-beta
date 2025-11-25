@@ -31,7 +31,10 @@ function Settings() {
     },
     modelFilter: '',
     modelFilterExclude: '',
-    disableThinkingSummaries: false
+    disableThinkingSummaries: false,
+    useResponsesApi: false,
+    googleConnectors: { gmail: false, calendar: false, drive: false },
+    googleOAuthToken: ''
   });
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,6 +86,15 @@ function Settings() {
         if (settingsData.disableThinkingSummaries === undefined) {
             settingsData.disableThinkingSummaries = false;
         }
+        if (settingsData.useResponsesApi === undefined) {
+            settingsData.useResponsesApi = false;
+        }
+        if (!settingsData.googleConnectors) {
+            settingsData.googleConnectors = { gmail: false, calendar: false, drive: false };
+        }
+        if (!settingsData.googleOAuthToken) {
+            settingsData.googleOAuthToken = '';
+        }
         setSettings(settingsData);
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -107,7 +119,10 @@ function Settings() {
             reasoning_effort: 'medium',
             modelFilter: '',
             modelFilterExclude: '',
-            disableThinkingSummaries: false
+            disableThinkingSummaries: false,
+            useResponsesApi: false,
+            googleConnectors: { gmail: false, calendar: false, drive: false },
+            googleOAuthToken: ''
         }));
       }
     };
@@ -191,6 +206,18 @@ function Settings() {
       builtInTools: {
         ...settings.builtInTools,
         [toolName]: checked
+      }
+    };
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+  };
+
+  const handleGoogleConnectorToggle = (connectorName, checked) => {
+    const updatedSettings = {
+      ...settings,
+      googleConnectors: {
+        ...settings.googleConnectors,
+        [connectorName]: checked
       }
     };
     setSettings(updatedSettings);
@@ -928,6 +955,97 @@ function Settings() {
                     {settings.customApiBaseUrlEnabled ? ' Toggle off to use the default Groq API.' : ' Toggle on to enable custom API base URL.'}
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Responses API & Connectors */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <span>Responses API & Connectors</span>
+                </CardTitle>
+                <CardDescription>
+                  Enable the Groq Responses API and Google connectors for extended capabilities.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label htmlFor="use-responses-api" className="font-medium">
+                      Use Responses API
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Switch from standard Chat Completions to the Responses API (Required for Connectors)
+                    </p>
+                  </div>
+                  <Switch
+                    id="use-responses-api"
+                    checked={settings.useResponsesApi || false}
+                    onChange={(e) => handleToggleChange('useResponsesApi', e.target.checked)}
+                  />
+                </div>
+
+                {settings.useResponsesApi && (
+                  <div className="space-y-4 pl-4 border-l-2 border-muted ml-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="google-oauth-token">Google OAuth Token</Label>
+                      <Input
+                        type="password"
+                        id="google-oauth-token"
+                        name="googleOAuthToken"
+                        value={settings.googleOAuthToken || ''}
+                        onChange={handleChange}
+                        placeholder="Enter your Google OAuth Access Token"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Required for Gmail, Calendar, and Drive connectors.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        💡 Tip: You can generate a temporary OAuth key at{' '}
+                        <a 
+                          href="https://developers.google.com/oauthplayground/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          https://developers.google.com/oauthplayground/
+                        </a>
+                      </p>
+                    </div>
+
+                    <div className="space-y-4 pt-2">
+                      <Label className="text-sm font-medium text-muted-foreground">Connectors</Label>
+                      
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="connector-gmail" className="font-normal">Gmail</Label>
+                        <Switch
+                          id="connector-gmail"
+                          checked={settings.googleConnectors?.gmail || false}
+                          onChange={(e) => handleGoogleConnectorToggle('gmail', e.target.checked)}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="connector-calendar" className="font-normal">Google Calendar</Label>
+                        <Switch
+                          id="connector-calendar"
+                          checked={settings.googleConnectors?.calendar || false}
+                          onChange={(e) => handleGoogleConnectorToggle('calendar', e.target.checked)}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="connector-drive" className="font-normal">Google Drive</Label>
+                        <Switch
+                          id="connector-drive"
+                          checked={settings.googleConnectors?.drive || false}
+                          onChange={(e) => handleGoogleConnectorToggle('drive', e.target.checked)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

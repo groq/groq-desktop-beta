@@ -25,7 +25,10 @@ function loadSettings() {
             customApiBaseUrl: '',
             customApiBaseUrlEnabled: false,
             customModels: {},
-            disableThinkingSummaries: false
+            disableThinkingSummaries: false,
+            useResponsesApi: false,
+            googleConnectors: { gmail: false, calendar: false, drive: false },
+            googleOAuthToken: ""
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -45,7 +48,10 @@ function loadSettings() {
         customApiBaseUrl: '',
         customApiBaseUrlEnabled: false,
         customModels: {},
-        disableThinkingSummaries: false
+        disableThinkingSummaries: false,
+        useResponsesApi: false,
+        googleConnectors: { gmail: false, calendar: false, drive: false },
+        googleOAuthToken: ""
     };
 
     try {
@@ -84,6 +90,9 @@ function loadSettings() {
             settings.customApiBaseUrlEnabled = settings.customApiBaseUrlEnabled ?? defaultSettings.customApiBaseUrlEnabled;
             settings.customModels = settings.customModels || defaultSettings.customModels;
             settings.disableThinkingSummaries = settings.disableThinkingSummaries ?? defaultSettings.disableThinkingSummaries;
+            settings.useResponsesApi = settings.useResponsesApi ?? defaultSettings.useResponsesApi;
+            settings.googleConnectors = settings.googleConnectors || defaultSettings.googleConnectors;
+            settings.googleOAuthToken = settings.googleOAuthToken || defaultSettings.googleOAuthToken;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
