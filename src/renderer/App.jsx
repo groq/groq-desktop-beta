@@ -847,7 +847,7 @@ function App() {
 
         // Handle MCP approval requests (remote MCP tools requiring user approval)
         streamHandler.onMcpApprovalRequest((approvalRequest) => {
-            console.log('Received MCP approval request:', approvalRequest);
+            // MCP approval request received during streaming
             // Store in finalAssistantData to be processed after stream completes
             if (!finalAssistantData.mcpApprovalRequests) {
                 finalAssistantData.mcpApprovalRequests = [];
@@ -1083,8 +1083,36 @@ function App() {
             currentTurnStatus = 'completed_no_tools';
         }
 
-        // NOTE: MCP approval request handling removed - Groq only supports require_approval: "never"
-        // When Groq adds support for mcp_approval_response, re-enable this code
+        // Handle MCP approval requests (remote tools requiring user approval)
+        // These are received when require_approval is set to "always" for a connector/remote MCP server
+        if (turnAssistantMessage?.mcp_approval_requests?.length > 0 || 
+            turnAssistantMessage?.finish_reason === 'mcp_approval_required') {
+            
+            const mcpApprovalRequests = turnAssistantMessage.mcp_approval_requests || [];
+            
+            if (mcpApprovalRequests.length > 0) {
+                // Process the first MCP approval request
+                const firstApprovalRequest = mcpApprovalRequests[0];
+                
+                // Show approval modal for the first request
+                setPendingApprovalCall({
+                    ...firstApprovalRequest,
+                    type: 'mcp_approval_request' // Ensure type is set for modal
+                });
+                
+                // Store state for resuming after approval
+                // IMPORTANT: We need to store the approval requests themselves to include them in the next input
+                setPausedChatState({
+                    currentMessages: turnMessages,
+                    finalAssistantMessage: turnAssistantMessage,
+                    accumulatedResponses: turnToolResponses,
+                    pendingMcpApprovals: mcpApprovalRequests.slice(1), // Remaining approvals
+                    mcpApprovalRequestItems: mcpApprovalRequests // Store all approval request items
+                });
+                
+                currentTurnStatus = 'paused';
+            }
+        }
 
     } catch (error) {
       console.error('Error in executeChatTurn:', error);
@@ -1401,9 +1429,10 @@ function App() {
           return;
       }
       
-      const toolName = toolCall.function?.name;
+      // Check if this is an MCP approval request (remote tool)
+      const isMcpApprovalRequest = toolCall.type === 'mcp_approval_request';
+      const toolName = isMcpApprovalRequest ? toolCall.name : toolCall.function?.name;
       
-      console.log(`User choice for tool '${toolName}': ${choice}`);
 
       // Clear the pending call *before* executing/resuming
       setPendingApprovalCall(null);
@@ -1411,39 +1440,146 @@ function App() {
       // Update localStorage based on choice
       setToolApprovalStatus(toolName, choice);
 
-      let handledToolResponse;
+      if (isMcpApprovalRequest) {
+          // Handle MCP approval request - need to send approval/denial back to the API
+          await handleMcpApprovalResponse(choice, toolCall);
+      } else {
+          // Handle local tool call
+          let handledToolResponse;
 
-      if (choice === 'deny') {
-          handledToolResponse = {
-              role: 'tool',
-              content: JSON.stringify({ error: 'Tool execution denied by user.' }),
-              tool_call_id: toolCall.id
-          };
-          setMessages(prev => [...prev, handledToolResponse]); // Show denial in UI
-          // Resume processing potential subsequent tools
-          await resumeChatFlow(handledToolResponse);
-      } else { // 'once', 'always', 'yolo' -> Execute the tool
-          setLoading(true); // Show loading specifically for tool execution phase
-          try {
-              console.log(`Executing tool '${toolName}' after user approval...`);
-              handledToolResponse = await executeToolCall(toolCall);
-              setMessages(prev => [...prev, handledToolResponse]); // Show result in UI
-              // Resume processing potential subsequent tools
-              await resumeChatFlow(handledToolResponse);
-          } catch (error) {
-              console.error(`Error executing approved tool call '${toolName}':`, error);
+          if (choice === 'deny') {
               handledToolResponse = {
                   role: 'tool',
-                  content: JSON.stringify({ error: `Error executing tool '${toolName}' after approval: ${error.message}` }),
+                  content: JSON.stringify({ error: 'Tool execution denied by user.' }),
                   tool_call_id: toolCall.id
               };
-              setMessages(prev => [...prev, handledToolResponse]); // Show error in UI
-              // Still try to resume processing subsequent tools even if this one failed
+              setMessages(prev => [...prev, handledToolResponse]); // Show denial in UI
+              // Resume processing potential subsequent tools
               await resumeChatFlow(handledToolResponse);
-          } finally {
-              // Loading state will be handled by resumeChatFlow or set to false if it errors/completes fully
-              // setLoading(false); // Don't set false here, resumeChatFlow handles it
+          } else { // 'once', 'always', 'yolo' -> Execute the tool
+              setLoading(true); // Show loading specifically for tool execution phase
+              try {
+                  console.log(`Executing tool '${toolName}' after user approval...`);
+                  handledToolResponse = await executeToolCall(toolCall);
+                  setMessages(prev => [...prev, handledToolResponse]); // Show result in UI
+                  // Resume processing potential subsequent tools
+                  await resumeChatFlow(handledToolResponse);
+              } catch (error) {
+                  console.error(`Error executing approved tool call '${toolName}':`, error);
+                  handledToolResponse = {
+                      role: 'tool',
+                      content: JSON.stringify({ error: `Error executing tool '${toolName}' after approval: ${error.message}` }),
+                      tool_call_id: toolCall.id
+                  };
+                  setMessages(prev => [...prev, handledToolResponse]); // Show error in UI
+                  // Still try to resume processing subsequent tools even if this one failed
+                  await resumeChatFlow(handledToolResponse);
+              } finally {
+                  // Loading state will be handled by resumeChatFlow or set to false if it errors/completes fully
+                  // setLoading(false); // Don't set false here, resumeChatFlow handles it
+              }
           }
+      }
+  };
+
+  // Handle MCP approval response - send approval/denial back to the API
+  const handleMcpApprovalResponse = async (choice, approvalRequest) => {
+      if (!pausedChatState) {
+          console.error("handleMcpApprovalResponse called without paused state");
+          setLoading(false);
+          return;
+      }
+
+      const { currentMessages, finalAssistantMessage, accumulatedResponses, pendingMcpApprovals, mcpApprovalRequestItems } = pausedChatState;
+      
+      // Determine approval decision
+      const approved = choice !== 'deny';
+      
+
+      // Create the approval response item for the API
+      const approvalResponseItem = {
+          type: 'mcp_approval_response',
+          approval_request_id: approvalRequest.id,
+          approve: approved,
+          // Include reason if denied
+          ...((!approved) && { reason: 'User denied the tool execution' })
+      };
+
+      // Check if there are more pending approvals
+      if (pendingMcpApprovals && pendingMcpApprovals.length > 0) {
+          // Show modal for the next approval request
+          const nextApproval = pendingMcpApprovals[0];
+          setPendingApprovalCall({
+              ...nextApproval,
+              type: 'mcp_approval_request'
+          });
+          
+          // Update paused state with the response and remaining approvals
+          setPausedChatState({
+              currentMessages,
+              finalAssistantMessage,
+              accumulatedResponses: [...accumulatedResponses, approvalResponseItem],
+              pendingMcpApprovals: pendingMcpApprovals.slice(1),
+              mcpApprovalRequestItems
+          });
+          return; // Wait for next approval
+      }
+
+      // All approvals handled, continue the conversation
+      setPausedChatState(null);
+      setLoading(true);
+
+      try {
+          // Build the input for the next API call
+          // For Responses API with MCP approvals:
+          // 1. Include original conversation history
+          // 2. Include the mcp_approval_request items (output from previous response)
+          // 3. Include the mcp_approval_response items (our responses)
+          
+          const allApprovalResponses = [...accumulatedResponses, approvalResponseItem]
+              .filter(r => r.type === 'mcp_approval_response');
+          
+          // Build messages for the next turn
+          const nextApiMessages = [
+              ...currentMessages,
+              // Include the assistant's message content if any
+              ...(finalAssistantMessage.content ? [{
+                  role: 'assistant',
+                  content: finalAssistantMessage.content,
+                  // Include any tool calls that were made
+                  ...(finalAssistantMessage.tool_calls && { tool_calls: finalAssistantMessage.tool_calls })
+              }] : []),
+              // Include the mcp_approval_request items from the response
+              // These need to be in the input so the API knows what we're responding to
+              ...(mcpApprovalRequestItems || []).map(req => ({
+                  type: 'mcp_approval_request',
+                  id: req.id,
+                  name: req.name,
+                  server_label: req.server_label,
+                  arguments: req.arguments
+              })),
+              // Add our approval responses
+              ...allApprovalResponses.map(r => ({
+                  type: 'mcp_approval_response',
+                  approval_request_id: r.approval_request_id,
+                  approve: r.approve,
+                  ...(r.reason && { reason: r.reason })
+              }))
+          ];
+
+
+          // Continue the conversation with the approval responses
+          const { status: nextTurnStatus } = await executeChatTurn(nextApiMessages);
+          
+          if (nextTurnStatus !== 'paused') {
+              setLoading(false);
+          }
+      } catch (error) {
+          if (error.message !== 'CANCELLED') {
+              console.error("Error during MCP approval continuation:", error);
+              setMessages(prev => [...prev, { role: 'assistant', content: `Error after approval: ${error.message}` }]);
+          }
+          setLoading(false);
       }
   };
 

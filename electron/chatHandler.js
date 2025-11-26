@@ -724,7 +724,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                 server_label: "gmail",
                 connector_id: "connector_gmail",
                 authorization: settings.googleOAuthToken,
-                require_approval: "never"
+                require_approval: settings.googleConnectorsApproval?.gmail || "never"
             });
         }
         if (settings.googleConnectors?.calendar && settings.googleOAuthToken) {
@@ -734,7 +734,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                 server_label: "google_calendar",
                 connector_id: "connector_googlecalendar",
                 authorization: settings.googleOAuthToken,
-                require_approval: "never"
+                require_approval: settings.googleConnectorsApproval?.calendar || "never"
             });
         }
         if (settings.googleConnectors?.drive && settings.googleOAuthToken) {
@@ -744,7 +744,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                 server_label: "google_drive",
                 connector_id: "connector_googledrive",
                 authorization: settings.googleOAuthToken,
-                require_approval: "never"
+                require_approval: settings.googleConnectorsApproval?.drive || "never"
             });
         }
 
@@ -811,6 +811,29 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
 
             if (msg.role === 'tool') {
                 continue; // Skip, handled via assistant message
+            }
+
+            // Handle MCP approval requests (from previous response output, being echoed back)
+            if (msg.type === 'mcp_approval_request') {
+                input.push({
+                    type: 'mcp_approval_request',
+                    id: msg.id,
+                    name: msg.name,
+                    server_label: msg.server_label,
+                    arguments: msg.arguments
+                });
+                continue;
+            }
+
+            // Handle MCP approval responses
+            if (msg.type === 'mcp_approval_response') {
+                input.push({
+                    type: 'mcp_approval_response',
+                    approval_request_id: msg.approval_request_id,
+                    approve: msg.approve,
+                    ...(msg.reason && { reason: msg.reason })
+                });
+                continue;
             }
 
             if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {

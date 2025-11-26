@@ -34,6 +34,7 @@ function Settings() {
     disableThinkingSummaries: false,
     useResponsesApi: false,
     googleConnectors: { gmail: false, calendar: false, drive: false },
+    googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
     googleOAuthToken: '',
     remoteMcpServers: {}
   });
@@ -106,6 +107,9 @@ function Settings() {
         if (!settingsData.googleConnectors) {
             settingsData.googleConnectors = { gmail: false, calendar: false, drive: false };
         }
+        if (!settingsData.googleConnectorsApproval) {
+            settingsData.googleConnectorsApproval = { gmail: 'never', calendar: 'never', drive: 'never' };
+        }
         if (!settingsData.googleOAuthToken) {
             settingsData.googleOAuthToken = '';
         }
@@ -139,6 +143,7 @@ function Settings() {
             disableThinkingSummaries: false,
             useResponsesApi: false,
             googleConnectors: { gmail: false, calendar: false, drive: false },
+            googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
             googleOAuthToken: '',
             remoteMcpServers: {}
         }));
@@ -236,6 +241,18 @@ function Settings() {
       googleConnectors: {
         ...settings.googleConnectors,
         [connectorName]: checked
+      }
+    };
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+  };
+
+  const handleGoogleConnectorApprovalChange = (connectorName, value) => {
+    const updatedSettings = {
+      ...settings,
+      googleConnectorsApproval: {
+        ...settings.googleConnectorsApproval,
+        [connectorName]: value
       }
     };
     setSettings(updatedSettings);
@@ -1187,31 +1204,81 @@ function Settings() {
                     <div className="space-y-4 pt-2">
                       <Label className="text-sm font-medium text-muted-foreground">Connectors</Label>
                       
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="connector-gmail" className="font-normal">Gmail</Label>
-                        <Switch
-                          id="connector-gmail"
-                          checked={settings.googleConnectors?.gmail || false}
-                          onChange={(e) => handleGoogleConnectorToggle('gmail', e.target.checked)}
-                        />
-                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <Switch
+                              id="connector-gmail"
+                              checked={settings.googleConnectors?.gmail || false}
+                              onChange={(e) => handleGoogleConnectorToggle('gmail', e.target.checked)}
+                            />
+                            <Label htmlFor="connector-gmail" className="font-normal">Gmail</Label>
+                          </div>
+                          {settings.googleConnectors?.gmail && (
+                            <Select
+                              value={settings.googleConnectorsApproval?.gmail || 'never'}
+                              onValueChange={(value) => handleGoogleConnectorApprovalChange('gmail', value)}
+                            >
+                              <SelectTrigger className="w-32 h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="never">Auto-approve</SelectItem>
+                                <SelectItem value="always">Always ask</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
 
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="connector-calendar" className="font-normal">Google Calendar</Label>
-                        <Switch
-                          id="connector-calendar"
-                          checked={settings.googleConnectors?.calendar || false}
-                          onChange={(e) => handleGoogleConnectorToggle('calendar', e.target.checked)}
-                        />
-                      </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <Switch
+                              id="connector-calendar"
+                              checked={settings.googleConnectors?.calendar || false}
+                              onChange={(e) => handleGoogleConnectorToggle('calendar', e.target.checked)}
+                            />
+                            <Label htmlFor="connector-calendar" className="font-normal">Google Calendar</Label>
+                          </div>
+                          {settings.googleConnectors?.calendar && (
+                            <Select
+                              value={settings.googleConnectorsApproval?.calendar || 'never'}
+                              onValueChange={(value) => handleGoogleConnectorApprovalChange('calendar', value)}
+                            >
+                              <SelectTrigger className="w-32 h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="never">Auto-approve</SelectItem>
+                                <SelectItem value="always">Always ask</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
 
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="connector-drive" className="font-normal">Google Drive</Label>
-                        <Switch
-                          id="connector-drive"
-                          checked={settings.googleConnectors?.drive || false}
-                          onChange={(e) => handleGoogleConnectorToggle('drive', e.target.checked)}
-                        />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <Switch
+                              id="connector-drive"
+                              checked={settings.googleConnectors?.drive || false}
+                              onChange={(e) => handleGoogleConnectorToggle('drive', e.target.checked)}
+                            />
+                            <Label htmlFor="connector-drive" className="font-normal">Google Drive</Label>
+                          </div>
+                          {settings.googleConnectors?.drive && (
+                            <Select
+                              value={settings.googleConnectorsApproval?.drive || 'never'}
+                              onValueChange={(value) => handleGoogleConnectorApprovalChange('drive', value)}
+                            >
+                              <SelectTrigger className="w-32 h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="never">Auto-approve</SelectItem>
+                                <SelectItem value="always">Always ask</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1234,6 +1301,11 @@ function Settings() {
                                   <div className="flex-1 space-y-1">
                                     <div className="flex items-center space-x-2">
                                       <Badge variant="secondary" className="text-xs">{config.serverLabel || id}</Badge>
+                                      {config.requireApproval === 'always' && (
+                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
+                                          Approval required
+                                        </Badge>
+                                      )}
                                     </div>
                                     
                                     <div className="text-xs text-muted-foreground font-mono truncate max-w-[300px]">
@@ -1343,7 +1415,24 @@ function Settings() {
                           />
                         </div>
 
-                        {/* Require Approval - hidden, Groq only supports "never" currently */}
+                        <div className="space-y-1">
+                          <Label htmlFor="remote-mcp-require-approval" className="text-xs">Require Approval</Label>
+                          <Select
+                            value={newRemoteMcpServer.requireApproval || 'never'}
+                            onValueChange={(value) => setNewRemoteMcpServer(prev => ({ ...prev, requireApproval: value }))}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="never">Auto-approve (never ask)</SelectItem>
+                              <SelectItem value="always">Always ask for approval</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            When set to "Always ask", you'll be prompted before each tool execution.
+                          </p>
+                        </div>
 
                         <div className="space-y-1">
                           <Label htmlFor="remote-mcp-allowed-tools" className="text-xs">Allowed Tools (optional)</Label>
