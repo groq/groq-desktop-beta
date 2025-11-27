@@ -1004,7 +1004,8 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
         const accumulatedData = {
             error: null,
             failed: false,
-            failureReason: null
+            failureReason: null,
+            apiStatus: null // Store the status from response.done/response.completed
         };
         
         // Store stream for cancellation (if supported by node-fetch/stream)
@@ -1158,6 +1159,17 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                 }
                                 break;
                                 
+                            case 'response.done':
+                            case 'response.completed':
+                                // Capture the API-reported status for proper finish_reason handling
+                                // This event contains the actual status from Groq (e.g., 'completed', 'requires_action', 'incomplete')
+                                if (data.response?.status) {
+                                    accumulatedData.apiStatus = data.response.status;
+                                } else if (data.status) {
+                                    accumulatedData.apiStatus = data.status;
+                                }
+                                break;
+
                             case 'response.output_item.done':
                                 if (data.item.type === 'mcp_approval_request') {
                                     // Handle completion of MCP approval request - emit final data
@@ -1294,17 +1306,25 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      }
                  });
 
-                 // Determine finish_reason:
-                 // - If we have MCP approval requests pending -> "mcp_approval_required"
-                 // - If we have tool calls without outputs, it means client needs to execute them -> "tool_calls"
-                 // - If we have tool calls with outputs (MCP), they're already done -> "stop"
-                 // - If no tool calls, normal completion -> "stop"
+                 // Determine finish_reason based on API status and tool state:
+                 // 1. Use API-reported status when available ('requires_action' = tool_calls needed)
+                 // 2. Check for MCP approval requests
+                 // 3. Check for local tools that need client-side execution
+                 // 4. Default to "stop" for completed responses
                  let finishReason = "stop";
-                 if (accumulatedData.mcpApprovalRequests && accumulatedData.mcpApprovalRequests.length > 0) {
+                 
+                 // Check API-reported status first (most reliable)
+                 if (accumulatedData.apiStatus === 'requires_action' || accumulatedData.apiStatus === 'incomplete') {
+                     // API explicitly says action is required (tool calls need execution)
+                     finishReason = "tool_calls";
+                 } else if (accumulatedData.mcpApprovalRequests && accumulatedData.mcpApprovalRequests.length > 0) {
                      // Remote MCP tools need approval before execution
                      finishReason = "mcp_approval_required";
                  } else if (toolCallsMap.size > 0 && toolOutputsMap.size === 0) {
-                     // Client-side tools that need execution
+                     // Fallback: Client-side tools that need execution (local function calls without server-side outputs)
+                     finishReason = "tool_calls";
+                 } else if (toolCallsMap.size > 0 && toolOutputsMap.size < toolCallsMap.size) {
+                     // Mixed tools: some remote (have outputs), some local (need execution)
                      finishReason = "tool_calls";
                  }
 
