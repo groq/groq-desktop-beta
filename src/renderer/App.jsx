@@ -8,7 +8,7 @@ import ChatHistorySidebar from './components/ChatHistorySidebar';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings, Zap, MessageSquare, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Settings, Zap, MessageSquare, PanelLeftClose, PanelLeft, Radio, MessagesSquare } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 
@@ -1780,6 +1780,24 @@ function App() {
                   {mcpTools.length} tools
                 </Badge>
               )}
+              
+              {/* API Mode Indicator */}
+              <span 
+                className="text-xs text-muted-foreground/60 flex items-center gap-1 cursor-default" 
+                title={useResponsesApi ? "Using Responses API (supports agentic features)" : "Using Chat Completions API"}
+              >
+                {useResponsesApi ? (
+                  <>
+                    <Radio className="w-3 h-3" />
+                    <span className="hidden sm:inline">Responses</span>
+                  </>
+                ) : (
+                  <>
+                    <MessagesSquare className="w-3 h-3" />
+                    <span className="hidden sm:inline">Completions</span>
+                  </>
+                )}
+              </span>
             </div>
 
             <div className="flex items-center space-x-2">
