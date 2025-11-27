@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import ToolCall from './ToolCall';
 import MarkdownRenderer from './MarkdownRenderer';
 import { TextShimmer } from './ui/text-shimmer';
+import { Badge } from './ui/badge';
+import { Zap } from 'lucide-react';
 
 function Message({ message, children, onToolCallExecute, allMessages, isLastMessage, messageIndex, onReloadFromMessage, loading, onActionsVisible, hideReasoningUI = false, combinedReasoning = null, combinedReasoningDuration = null }) {
   const { role, tool_calls, reasoning, isStreaming, executed_tools, liveReasoning, liveExecutedTools, reasoningSummaries, reasoningDuration, usage } = message;
@@ -217,15 +219,18 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                 </button>
               )}
               
-              {/* Tool execution dropdown - green */}
+              {/* Tool execution dropdown - badge style matching header "5 tools" chip */}
               {hasExecutedTools && (
-                <button 
+                <Badge 
+                  variant="secondary" 
+                  className="bg-[#E9E9DF] hover:bg-[#DDD9D0] cursor-pointer transition-colors duration-200"
                   onClick={toggleExecutedTools}
-                  className="flex items-center text-sm px-3 py-1 rounded-md bg-green-100 hover:bg-green-200 text-green-800 transition-colors duration-200"
                 >
+                  <Zap className="w-3 h-3 mr-1" />
+                  <span>{`Built in tool calling [${currentTools?.length || 0}]`}</span>
                   <svg 
                     xmlns="http://www.w3.org/2000/svg" 
-                    className={`h-4 w-4 mr-1 transition-transform duration-200 ${showExecutedTools ? 'rotate-90' : ''}`} 
+                    className={`h-3 w-3 ml-1 transition-transform duration-200 ${showExecutedTools ? 'rotate-90' : ''}`} 
                     fill="none" 
                     viewBox="0 0 24 24" 
                     stroke="currentColor"
@@ -233,14 +238,13 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  {`Built in tool calling [${currentTools?.length || 0}]`}
                   {isStreamingMessage && currentTools?.some(t => !t.output) && (
-                    <svg className="animate-spin ml-2 h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin ml-1.5 h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                   )}
-                </button>
+                </Badge>
               )}
             </div>
             
@@ -268,37 +272,25 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
               <div className="space-y-2">
                 {currentTools.map((tool, index) => {
                   const isLive = liveExecutedTools?.length > 0;
+                  const isExecuting = isLive && !tool.output;
                   return (
-                    <div key={`tool-${tool.index || index}`} className={`p-3 rounded-md text-sm border ${isLive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className={`font-semibold mb-2 ${isLive ? 'text-green-800' : 'text-gray-800'}`}>
-                        {tool.type === 'python' ? '🐍 Python Code' : `🔧 ${tool.type || 'function'}`}
-                        
+                    <div key={`tool-${tool.index || index}`} className="p-3 rounded-md text-sm border bg-[#F5F5F0] border-[#E5E5DC]">
+                      <div className="flex items-center gap-2 mb-2 text-gray-700">
+                        <span className="font-medium">{tool.name || tool.type || 'function'}</span>
                         {tool.server_label && (
-                          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded border ${isLive ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-[#E9E9DF] text-gray-600">
                             {tool.server_label}
                           </span>
                         )}
-
-                        {tool.name && (
-                          <span className={`ml-2 font-normal text-sm ${isLive ? 'text-green-700' : 'text-gray-700'}`}>
-                            ({tool.name})
-                          </span>
-                        )}
-                        {isLive ? (
-                          !tool.output ? (
-                            <span className="ml-2 text-green-600">Executing...</span>
-                          ) : (
-                            <span className="ml-2 text-green-600">✓ Complete</span>
-                          )
-                        ) : (
-                          <span className="ml-2 text-green-600">✓ Complete</span>
-                        )}
+                        <span className={`text-xs ${isExecuting ? 'text-amber-600' : 'text-gray-500'}`}>
+                          {isExecuting ? '• running' : '• done'}
+                        </span>
                       </div>
                       
                       {tool.arguments && (
                         <div className="mb-2">
-                          <div className={`text-xs mb-1 ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Code:</div>
-                          <pre className={`p-2 rounded overflow-x-auto text-xs ${isLive ? 'bg-green-100 text-green-900' : 'bg-gray-100 text-gray-900'}`}>
+                          <div className="text-xs mb-1 text-gray-500">Code:</div>
+                          <pre className="p-2 rounded overflow-x-auto text-xs bg-white/60 text-gray-800 border border-[#E5E5DC]">
                             {typeof tool.arguments === 'string' ? 
                               (tool.arguments.startsWith('{') ? 
                                 (() => {
@@ -326,8 +318,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                               // Show output directly for 10 lines or fewer
                               return (
                                 <div>
-                                  <div className={`text-xs mb-1 ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Output:</div>
-                                  <pre className={`bg-white p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200' : 'text-gray-900 border-gray-200'}`}>
+                                  <div className="text-xs mb-1 text-gray-500">Output:</div>
+                                  <pre className="bg-white p-2 rounded overflow-x-auto text-xs border border-[#E5E5DC] text-gray-800">
                                     {tool.output}
                                   </pre>
                                 </div>
@@ -338,22 +330,20 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
                             return (
                               <div>
                                 <div className="flex items-center justify-between mb-1">
-                                  <div className={`text-xs ${isLive ? 'text-green-700' : 'text-gray-700'}`}>Output:</div>
+                                  <div className="text-xs text-gray-500">Output:</div>
                                   <button
                                     onClick={() => toggleOutputCollapse(tool.index || index)}
-                                    className={`text-xs px-2 py-0.5 rounded hover:bg-opacity-80 transition-colors ${
-                                      isLive ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                                    }`}
+                                    className="text-xs px-2 py-0.5 rounded bg-[#E9E9DF] text-gray-600 hover:bg-[#DDD9D0] transition-colors"
                                   >
                                     {isOutputCollapsed(tool.index || index) ? 'Show' : 'Hide'}
                                   </button>
                                 </div>
                                 {isOutputCollapsed(tool.index || index) ? (
-                                  <div className={`bg-white p-2 rounded text-xs border ${isLive ? 'text-green-700 border-green-200' : 'text-gray-700 border-gray-200'} italic`}>
+                                  <div className="bg-white p-2 rounded text-xs border border-[#E5E5DC] text-gray-500 italic">
                                     Output available (click Show to expand)
                                   </div>
                                 ) : (
-                                  <pre className={`bg-white p-2 rounded overflow-x-auto text-xs border ${isLive ? 'text-green-900 border-green-200' : 'text-gray-900 border-gray-200'}`}>
+                                  <pre className="bg-white p-2 rounded overflow-x-auto text-xs border border-[#E5E5DC] text-gray-800">
                                     {tool.output}
                                   </pre>
                                 )}
