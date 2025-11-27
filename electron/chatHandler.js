@@ -6,6 +6,33 @@ const { supportsBuiltInTools } = require('../shared/models');
 // Track active streams to allow cancellation
 const activeStreams = new Map();
 
+// Track streams by sender webContents ID to prevent duplicates during HMR
+const streamsBySender = new Map();
+
+/**
+ * Helper to clean up a stream from both tracking maps
+ * @param {string} streamId - The stream ID to clean up
+ */
+function cleanupStream(streamId) {
+    const streamInfo = activeStreams.get(streamId);
+    if (streamInfo) {
+        // Clear any intervals
+        if (streamInfo.summaryInterval) {
+            clearInterval(streamInfo.summaryInterval);
+            streamInfo.summaryInterval = null;
+        }
+    }
+    activeStreams.delete(streamId);
+    
+    // Also clean up from streamsBySender
+    for (const [senderId, sid] of streamsBySender.entries()) {
+        if (sid === streamId) {
+            streamsBySender.delete(senderId);
+            break;
+        }
+    }
+}
+
 function validateApiKey(settings) {
     if (!settings.GROQ_API_KEY || settings.GROQ_API_KEY === "<replace me>") {
         throw new Error("API key not configured. Please add your GROQ API key in settings.");
@@ -121,6 +148,7 @@ function cleanMessages(messages) {
         delete cleanMsg.executed_tools;
         delete cleanMsg.reasoningStartTime;
         delete cleanMsg.usage;
+        delete cleanMsg.finish_reason;
 
         // Ensure user content is array format for vision support
         if (cleanMsg.role === 'user') {
@@ -523,7 +551,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
             // Check if stream was cancelled before starting
             if (!streamInfo || streamInfo.cancelled) {
                 event.sender.send('chat-stream-cancelled', { streamId });
-                activeStreams.delete(streamId);
+                cleanupStream(streamId);
                 return;
             }
 
@@ -547,7 +575,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                         }
                     }
                     event.sender.send('chat-stream-cancelled', { streamId });
-                    activeStreams.delete(streamId);
+                    cleanupStream(streamId);
                     return;
                 }
 
@@ -555,7 +583,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
 
                 if (finishReason) {
                     handleStreamCompletion(event, accumulatedData, finishReason, streamId);
-                    activeStreams.delete(streamId);
+                    cleanupStream(streamId);
                     return;
                 }
             }
@@ -570,7 +598,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 }
             }
             
-            activeStreams.delete(streamId);
+            cleanupStream(streamId);
             event.sender.send('chat-stream-error', { error: "Stream ended unexpectedly." });
             return;
 
@@ -587,7 +615,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                     }
                 }
                 event.sender.send('chat-stream-cancelled', { streamId });
-                activeStreams.delete(streamId);
+                cleanupStream(streamId);
                 return;
             }
 
@@ -650,7 +678,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 }
             }
             
-            activeStreams.delete(streamId);
+            cleanupStream(streamId);
             event.sender.send('chat-stream-error', {
                 error: `Failed to get chat completion: ${errorMessage}`,
                 details: error
@@ -659,7 +687,7 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
         }
     }
 
-    activeStreams.delete(streamId);
+    cleanupStream(streamId);
     event.sender.send('chat-stream-error', {
         error: `The model repeatedly failed to use tools correctly after ${MAX_TOOL_USE_RETRIES + 1} attempts. Please try rephrasing your request.`
     });
@@ -700,7 +728,28 @@ function handleResponsesApiEvent(data, event, streamId) {
 }
 
 async function handleResponsesApiStream(event, messages, model, settings, modelContextSizes, discoveredTools) {
+    // Get sender ID to track streams per webContents (prevents duplicate streams during HMR)
+    const senderId = event.sender.id;
+    
+    // Cancel any existing streams from this sender before starting a new one
+    const existingStreamId = streamsBySender.get(senderId);
+    if (existingStreamId) {
+        console.log(`[ChatHandler Responses API] Cancelling existing stream ${existingStreamId} for sender ${senderId}`);
+        const existingStream = activeStreams.get(existingStreamId);
+        if (existingStream) {
+            existingStream.cancelled = true;
+            // Try to destroy the stream if it exists
+            if (existingStream.stream && typeof existingStream.stream.destroy === 'function') {
+                existingStream.stream.destroy();
+            }
+        }
+        cleanupStream(existingStreamId);
+    }
+    
     const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Track this stream by sender
+    streamsBySender.set(senderId, streamId);
     
     try {
         activeStreams.set(streamId, {
@@ -751,6 +800,12 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
         // Add Remote MCP Servers
         if (settings.remoteMcpServers && typeof settings.remoteMcpServers === 'object') {
             for (const [serverId, serverConfig] of Object.entries(settings.remoteMcpServers)) {
+                // Skip disabled servers (enabled defaults to true if not specified)
+                if (serverConfig.enabled === false) {
+                    console.log(`[ChatHandler] Remote MCP server ${serverId} is disabled, skipping`);
+                    continue;
+                }
+                
                 if (!serverConfig.serverUrl) {
                     console.warn(`[ChatHandler] Remote MCP server ${serverId} missing serverUrl, skipping`);
                     continue;
@@ -1212,7 +1267,7 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      const errorMessage = accumulatedData.error || accumulatedData.failureReason || 'Response generation failed';
                      console.error('[Responses API] Stream ended with error:', errorMessage);
                      event.sender.send('chat-stream-error', { error: errorMessage });
-                     activeStreams.delete(streamId);
+                     cleanupStream(streamId);
                      return;
                  }
                  
@@ -1263,19 +1318,19 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      reasoning: accumulatedReasoning || undefined,
                      mcp_approval_requests: accumulatedData.mcpApprovalRequests || undefined
                  });
-                 activeStreams.delete(streamId);
+                 cleanupStream(streamId);
              }
         });
         
         stream.on('error', (err) => {
              if (!activeStreams.get(streamId)?.cancelled) {
                  event.sender.send('chat-stream-error', { error: err.message });
-                 activeStreams.delete(streamId);
+                 cleanupStream(streamId);
              }
         });
 
     } catch (error) {
-        activeStreams.delete(streamId);
+        cleanupStream(streamId);
         event.sender.send('chat-stream-error', { error: error.message });
     }
 }
@@ -1292,6 +1347,21 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
  * @param {Array<object>} discoveredTools - Available MCP tools
  */
 async function handleChatStream(event, messages, model, settings, modelContextSizes, discoveredTools) {
+    // Get sender ID to track streams per webContents (prevents duplicate streams during HMR)
+    const senderId = event.sender.id;
+    
+    // Cancel any existing streams from this sender before starting a new one
+    // This prevents duplicate responses when HMR reloads the renderer
+    const existingStreamId = streamsBySender.get(senderId);
+    if (existingStreamId) {
+        console.log(`[ChatHandler] Cancelling existing stream ${existingStreamId} for sender ${senderId} before starting new stream`);
+        const existingStream = activeStreams.get(existingStreamId);
+        if (existingStream) {
+            existingStream.cancelled = true;
+        }
+        cleanupStream(existingStreamId);
+    }
+    
     // Check if Responses API should be used
     if (settings.useResponsesApi) {
         return handleResponsesApiStream(event, messages, model, settings, modelContextSizes, discoveredTools);
@@ -1299,6 +1369,9 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
 
     // Generate unique stream ID
     const streamId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Track this stream by sender
+    streamsBySender.set(senderId, streamId);
     
     try {
         // Register this stream as active
@@ -1315,7 +1388,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
         
         // If vision check failed, return early
         if (!visionCheckPassed) {
-            activeStreams.delete(streamId);
+            cleanupStream(streamId);
             return;
         }
 
@@ -1355,7 +1428,7 @@ async function handleChatStream(event, messages, model, settings, modelContextSi
 
         await executeStreamWithRetry(groq, chatCompletionParams, event, streamId, settings);
     } catch (outerError) {
-        activeStreams.delete(streamId);
+        cleanupStream(streamId);
         event.sender.send('chat-stream-error', { error: outerError.message || `Setup error: ${outerError}` });
     }
 }

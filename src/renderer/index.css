@@ -256,4 +256,70 @@ select#model-select {
   background-position: right 0.5rem center;
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
+}
+
+/* Chat History Sidebar Styles */
+.chat-sidebar {
+  @apply flex flex-col h-full bg-background border-r border-border;
+  transition: width 0.3s ease-in-out;
+}
+
+.chat-sidebar.collapsed {
+  @apply w-16;
+}
+
+.chat-sidebar.expanded {
+  @apply w-64;
+}
+
+.chat-sidebar-header {
+  @apply flex items-center justify-between p-3 border-b border-border;
+}
+
+.chat-list-item {
+  @apply relative flex items-center gap-2 px-3 py-2 cursor-pointer rounded-lg mx-2 transition-colors duration-150;
+}
+
+.chat-list-item:hover {
+  @apply bg-muted/50;
+}
+
+.chat-list-item.active {
+  @apply bg-[#E9E9DF] text-foreground;
+}
+
+.chat-list-item .chat-title {
+  @apply truncate text-sm font-medium;
+}
+
+.chat-list-item .chat-time {
+  @apply flex items-center gap-1 text-xs text-muted-foreground;
+}
+
+/* Sidebar group headers */
+.chat-group-header {
+  @apply px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider;
+}
+
+/* Sidebar scrollbar styling */
+.chat-sidebar .overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted)) transparent;
+}
+
+.chat-sidebar .overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-sidebar .overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-sidebar .overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted));
+  border-radius: 3px;
+}
+
+.chat-sidebar .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground));
 } 

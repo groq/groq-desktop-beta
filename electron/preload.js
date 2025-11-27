@@ -1,5 +1,28 @@
 const { ipcRenderer, contextBridge } = require('electron');
 
+// Chat stream channel names - centralized for consistency
+const CHAT_STREAM_CHANNELS = [
+  'chat-stream-start',
+  'chat-stream-content',
+  'chat-stream-tool-calls',
+  'chat-stream-reasoning',
+  'chat-stream-reasoning-summary',
+  'chat-stream-tool-execution',
+  'chat-stream-mcp-approval-request',
+  'chat-stream-complete',
+  'chat-stream-error',
+  'chat-stream-cancelled',
+  'chat-stream-retry'
+];
+
+// Clean up all chat stream listeners - call this before setting up new ones
+// This prevents duplicate listeners from accumulating during HMR
+function cleanupChatStreamListeners() {
+  CHAT_STREAM_CHANNELS.forEach(channel => {
+    ipcRenderer.removeAllListeners(channel);
+  });
+}
+
 contextBridge.exposeInMainWorld('electron', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
@@ -12,67 +35,61 @@ contextBridge.exposeInMainWorld('electron', {
   
   // Streaming API events
   startChatStream: (messages, model) => {
+    // CRITICAL: Clean up any existing listeners BEFORE setting up new ones
+    // This prevents duplicate responses when HMR reloads the renderer
+    cleanupChatStreamListeners();
+    
     // Start a new chat stream
     ipcRenderer.send('chat-stream', messages, model);
     
+    // Track registered listeners so we can properly clean them up
+    const registeredListeners = new Map();
+    
+    // Helper to create a listener that properly tracks the wrapper function
+    const createListener = (channel) => (callback) => {
+      // Create the wrapper function
+      const wrapper = (_, data) => callback(data);
+      // Store the wrapper so we can remove the exact function later
+      if (!registeredListeners.has(channel)) {
+        registeredListeners.set(channel, []);
+      }
+      registeredListeners.get(channel).push(wrapper);
+      // Register the listener
+      ipcRenderer.on(channel, wrapper);
+      // Return cleanup function that removes this specific listener
+      return () => {
+        ipcRenderer.removeListener(channel, wrapper);
+        const listeners = registeredListeners.get(channel);
+        if (listeners) {
+          const idx = listeners.indexOf(wrapper);
+          if (idx !== -1) listeners.splice(idx, 1);
+        }
+      };
+    };
+    
     // Setup event listeners for streaming responses
     return {
-      onStart: (callback) => {
-        ipcRenderer.on('chat-stream-start', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-start', callback);
-      },
-      onContent: (callback) => {
-        ipcRenderer.on('chat-stream-content', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-content', callback);
-      },
-      onToolCalls: (callback) => {
-        ipcRenderer.on('chat-stream-tool-calls', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-tool-calls', callback);
-      },
-      onReasoning: (callback) => {
-        ipcRenderer.on('chat-stream-reasoning', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-reasoning', callback);
-      },
-      onReasoningSummary: (callback) => {
-        ipcRenderer.on('chat-stream-reasoning-summary', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-reasoning-summary', callback);
-      },
-      onToolExecution: (callback) => {
-        ipcRenderer.on('chat-stream-tool-execution', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-tool-execution', callback);
-      },
-      onMcpApprovalRequest: (callback) => {
-        ipcRenderer.on('chat-stream-mcp-approval-request', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-mcp-approval-request', callback);
-      },
-      onComplete: (callback) => {
-        ipcRenderer.on('chat-stream-complete', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-complete', callback);
-      },
-      onError: (callback) => {
-        ipcRenderer.on('chat-stream-error', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-error', callback);
-      },
-      onCancelled: (callback) => {
-        ipcRenderer.on('chat-stream-cancelled', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-cancelled', callback);
-      },
-      onRetry: (callback) => {
-        ipcRenderer.on('chat-stream-retry', (_, data) => callback(data));
-        return () => ipcRenderer.removeListener('chat-stream-retry', callback);
-      },
+      onStart: createListener('chat-stream-start'),
+      onContent: createListener('chat-stream-content'),
+      onToolCalls: createListener('chat-stream-tool-calls'),
+      onReasoning: createListener('chat-stream-reasoning'),
+      onReasoningSummary: createListener('chat-stream-reasoning-summary'),
+      onToolExecution: createListener('chat-stream-tool-execution'),
+      onMcpApprovalRequest: createListener('chat-stream-mcp-approval-request'),
+      onComplete: createListener('chat-stream-complete'),
+      onError: createListener('chat-stream-error'),
+      onCancelled: createListener('chat-stream-cancelled'),
+      onRetry: createListener('chat-stream-retry'),
       cleanup: () => {
-        ipcRenderer.removeAllListeners('chat-stream-start');
-        ipcRenderer.removeAllListeners('chat-stream-content');
-        ipcRenderer.removeAllListeners('chat-stream-tool-calls');
-        ipcRenderer.removeAllListeners('chat-stream-reasoning');
-        ipcRenderer.removeAllListeners('chat-stream-reasoning-summary');
-        ipcRenderer.removeAllListeners('chat-stream-tool-execution');
-        ipcRenderer.removeAllListeners('chat-stream-mcp-approval-request');
-        ipcRenderer.removeAllListeners('chat-stream-complete');
-        ipcRenderer.removeAllListeners('chat-stream-error');
-        ipcRenderer.removeAllListeners('chat-stream-cancelled');
-        ipcRenderer.removeAllListeners('chat-stream-retry');
+        // Remove all listeners registered through this stream handler
+        registeredListeners.forEach((listeners, channel) => {
+          listeners.forEach(wrapper => {
+            ipcRenderer.removeListener(channel, wrapper);
+          });
+        });
+        registeredListeners.clear();
+        // Also do a full cleanup to catch any stragglers
+        cleanupChatStreamListeners();
       }
     };
   },
@@ -80,6 +97,11 @@ contextBridge.exposeInMainWorld('electron', {
   // Stop chat stream
   stopChatStream: () => {
     ipcRenderer.send('stop-chat-stream');
+  },
+  
+  // Clean up all chat stream listeners (useful for HMR and component unmount)
+  cleanupChatStreamListeners: () => {
+    cleanupChatStreamListeners();
   },
   
   // MCP related functions
@@ -166,6 +188,18 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Autocomplete
   getAutocompleteSuggestion: (options) => ipcRenderer.invoke('autocomplete:get-suggestion', options),
+
+  // --- Chat History Functions ---
+  chatHistory: {
+    list: () => ipcRenderer.invoke('chat-history-list'),
+    load: (chatId) => ipcRenderer.invoke('chat-history-load', chatId),
+    create: (model, useResponsesApi) => ipcRenderer.invoke('chat-history-create', model, useResponsesApi),
+    save: (chat) => ipcRenderer.invoke('chat-history-save', chat),
+    updateMessages: (chatId, messages) => ipcRenderer.invoke('chat-history-update-messages', chatId, messages),
+    updateTitle: (chatId, title) => ipcRenderer.invoke('chat-history-update-title', chatId, title),
+    delete: (chatId) => ipcRenderer.invoke('chat-history-delete', chatId),
+    generateTitle: (userMessage) => ipcRenderer.invoke('chat-history-generate-title', userMessage),
+  },
 
   // Generic IPC renderer access (kept for backward compatibility)
   ipcRenderer: {

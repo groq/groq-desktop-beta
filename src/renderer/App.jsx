@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import ToolsPanel from './components/ToolsPanel';
 import ToolApprovalModal from './components/ToolApprovalModal';
+import ChatHistorySidebar from './components/ChatHistorySidebar';
 import { useChat } from './context/ChatContext'; // Import useChat hook
 // Import shared model definitions - REMOVED
 // import { MODEL_CONTEXT_SIZES } from '../../shared/models';
-import { Settings, Zap, MessageSquare } from 'lucide-react';
+import { Settings, Zap, MessageSquare, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 
@@ -67,7 +68,16 @@ const setToolApprovalStatus = (toolName, status) => {
 
 function App() {
   // const [messages, setMessages] = useState([]); // Remove local state
-  const { messages, setMessages } = useChat(); // Use context state
+  const { 
+    messages, 
+    setMessages, 
+    currentChatId,
+    createNewChat, 
+    startFreshChat,
+    isSidebarCollapsed,
+    toggleSidebar,
+    needsTitleGeneration
+  } = useChat(); // Use context state
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
   const [mcpTools, setMcpTools] = useState([]);
@@ -90,6 +100,8 @@ function App() {
   const [visionSupported, setVisionSupported] = useState(false);
   // Add state to track if initial model/settings load is complete
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  // Track if using Responses API (needed for chat history compatibility)
+  const [useResponsesApi, setUseResponsesApi] = useState(false);
 
   // --- State for Tool Approval Flow ---
   const [pendingApprovalCall, setPendingApprovalCall] = useState(null); // Holds the tool call object needing approval
@@ -363,6 +375,8 @@ function App() {
         // Load model filter settings
         setModelFilter(settings.modelFilter || '');
         setModelFilterExclude(settings.modelFilterExclude || '');
+        // Load useResponsesApi setting
+        setUseResponsesApi(settings.useResponsesApi || false);
         let effectiveModel = availableModels.length > 0 ? availableModels[0] : 'default'; // Default fallback if no models or no setting
 
         if (settings && settings.model) {
@@ -424,15 +438,16 @@ function App() {
     loadInitialData();
   }, []); // Empty dependency array ensures this runs only once on mount
 
-  // Reload model filter when window gains focus (in case settings changed)
+  // Reload settings when window gains focus (in case settings changed)
   useEffect(() => {
     const handleFocus = async () => {
       try {
         const settings = await window.electron.getSettings();
         setModelFilter(settings.modelFilter || '');
         setModelFilterExclude(settings.modelFilterExclude || '');
+        setUseResponsesApi(settings.useResponsesApi || false);
       } catch (error) {
-        console.error('Error reloading model filter:', error);
+        console.error('Error reloading settings:', error);
       }
     };
 
@@ -710,12 +725,20 @@ function App() {
     loadingRef.current = loading;
   }, [loading]);
 
-  // Cleanup function to stop any active streams when component unmounts (page reload/navigation)
+  // Cleanup function to stop any active streams when component unmounts (page reload/navigation/HMR)
   useEffect(() => {
     return () => {
-      // Stop any active streams when the component actually unmounts (not when loading changes)
+      // Always clean up IPC listeners on unmount (important for HMR)
+      console.log('Component unmounting, cleaning up...');
+      
+      // Clean up chat stream listeners to prevent duplicates on HMR
+      if (window.electron.cleanupChatStreamListeners) {
+        window.electron.cleanupChatStreamListeners();
+      }
+      
+      // Stop any active streams when the component actually unmounts
       if (loadingRef.current) {
-        console.log('Component unmounting, stopping active streams...');
+        console.log('Stopping active streams...');
         cancelledRef.current = true;
         window.electron.stopChatStream();
       }
@@ -1154,6 +1177,11 @@ function App() {
     const hasContent = isStructuredContent ? content.some(part => (part.type === 'text' && part.text.trim()) || part.type === 'image_url') : content.trim();
 
     if (!hasContent) return;
+
+    // If no current chat exists, create one first with current API mode
+    if (!currentChatId) {
+      await createNewChat(selectedModel, useResponsesApi);
+    }
 
     // Reset cancellation flag for new message
     cancelledRef.current = false;
@@ -1670,62 +1698,112 @@ function App() {
       setMcpServersStatus({ loading: false, message: "Error refreshing MCP tools" });
     }
   };
-  return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Modern Sticky Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
-        <div className="flex h-16 items-center justify-between px-6 max-w-full">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <img 
-                src="./groqLogo.png" 
-                alt="Groq Logo" 
-                className="h-8 w-auto"
-              />
-            </div>
-            
-            {/* Status Badge */}
-            {mcpTools.length > 0 && (
-              <Badge variant="secondary" className="ml-4 bg-[#E9E9DF] hover:bg-[#E9E9DF]">
-                <Zap className="w-3 h-3 mr-1" />
-                {mcpTools.length} tools
-              </Badge>
-            )}
-          </div>
 
-          <div className="flex items-center space-x-2">
-            {/* New Chat Button - only show when there are messages */}
-            {messages.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  // Stop any ongoing streams before clearing
-                  if (loading) {
-                    console.log('Stopping streams before starting new chat...');
-                    window.electron.stopChatStream();
-                    setLoading(false);
-                    // Clear any pending tool approval state
-                    setPendingApprovalCall(null);
-                    setPausedChatState(null);
-                  }
-                  setMessages([]);
-                }}
-                className="text-foreground hover:text-foreground"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                New Chat
-              </Button>
-            )}
-            
-            <Link to="/settings">
-              <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
+  // Handle creating a new chat
+  const handleNewChat = useCallback(async () => {
+    // Stop any ongoing streams before clearing
+    if (loading) {
+      console.log('Stopping streams before starting new chat...');
+      window.electron.stopChatStream();
+      setLoading(false);
+      // Clear any pending tool approval state
+      setPendingApprovalCall(null);
+      setPausedChatState(null);
+    }
+    
+    // Create a new chat in history with the current API mode
+    await createNewChat(selectedModel, useResponsesApi);
+  }, [loading, createNewChat, selectedModel, useResponsesApi]);
+
+  // Handle when a chat is loaded from history - switch API mode if needed
+  const handleChatLoaded = useCallback(async (chat) => {
+    if (chat && chat.useResponsesApi !== undefined) {
+      const chatApiMode = chat.useResponsesApi;
+      
+      // If the chat's API mode differs from current setting, update it
+      if (chatApiMode !== useResponsesApi) {
+        console.log(`[App] Switching API mode for chat: useResponsesApi=${chatApiMode}`);
+        setUseResponsesApi(chatApiMode);
+        
+        // Also update the setting in storage so the chat handler uses it
+        try {
+          const settings = await window.electron.getSettings();
+          if (settings.useResponsesApi !== chatApiMode) {
+            await window.electron.saveSettings({ ...settings, useResponsesApi: chatApiMode });
+          }
+        } catch (error) {
+          console.error('Error updating API mode setting:', error);
+        }
+      }
+    }
+  }, [useResponsesApi]);
+  return (
+    <div className="flex h-screen bg-background">
+      {/* Chat History Sidebar */}
+      <ChatHistorySidebar 
+        onNewChat={handleNewChat}
+        onChatLoaded={handleChatLoaded}
+        loading={loading}
+      />
+      
+      {/* Main Content Area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Modern Sticky Header */}
+        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 shadow-sm">
+          <div className="flex h-14 items-center justify-between px-4 max-w-full">
+            <div className="flex items-center space-x-3">
+              {/* Sidebar toggle for mobile/collapsed state */}
+              {isSidebarCollapsed && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleSidebar}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  title="Expand sidebar"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                </Button>
+              )}
+              
+              <div className="flex items-center space-x-2">
+                <img 
+                  src="./groqLogo.png" 
+                  alt="Groq Logo" 
+                  className="h-7 w-auto"
+                />
+              </div>
+              
+              {/* Status Badge */}
+              {mcpTools.length > 0 && (
+                <Badge variant="secondary" className="bg-[#E9E9DF] hover:bg-[#E9E9DF]">
+                  <Zap className="w-3 h-3 mr-1" />
+                  {mcpTools.length} tools
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* New Chat Button - only show when there are messages */}
+              {messages.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleNewChat}
+                  className="text-foreground hover:text-foreground"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  New Chat
+                </Button>
+              )}
+              
+              <Link to="/settings">
+                <Button variant="ghost" size="icon" className="text-foreground hover:text-foreground">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* Main Content */}
       {/* TODO: Make the scroll area the entire width instead of the container while keeping the input at the bottom*/}
@@ -1815,6 +1893,7 @@ function App() {
                     onApprove={handleToolApproval}
         />
       )}
+      </div>
     </div>
   );
 }

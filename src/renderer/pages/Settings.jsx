@@ -788,6 +788,25 @@ function Settings() {
   };
 
   // Remote MCP Server Management Functions
+  const handleRemoteMcpServerToggle = (serverId, enabled) => {
+    const serverConfig = settings.remoteMcpServers[serverId];
+    if (!serverConfig) return;
+
+    const updatedSettings = {
+      ...settings,
+      remoteMcpServers: {
+        ...settings.remoteMcpServers,
+        [serverId]: {
+          ...serverConfig,
+          enabled: enabled
+        }
+      }
+    };
+
+    setSettings(updatedSettings);
+    saveSettings(updatedSettings);
+  };
+
   const handleNewRemoteMcpServerChange = (e) => {
     const { name, value } = e.target;
     setNewRemoteMcpServer(prev => ({ ...prev, [name]: value }));
@@ -1294,65 +1313,80 @@ function Settings() {
                       {/* Configured Remote MCP Servers List */}
                       {Object.keys(settings.remoteMcpServers || {}).length > 0 && (
                         <div className="space-y-3">
-                          {Object.entries(settings.remoteMcpServers || {}).map(([id, config]) => (
-                            <Card key={id} className="border-border/50">
-                              <CardContent className="p-3">
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1 space-y-1">
-                                    <div className="flex items-center space-x-2">
-                                      <Badge variant="secondary" className="text-xs">{config.serverLabel || id}</Badge>
-                                      {config.requireApproval === 'always' && (
-                                        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
-                                          Approval required
-                                        </Badge>
-                                      )}
+                          {Object.entries(settings.remoteMcpServers || {}).map(([id, config]) => {
+                            const isEnabled = config.enabled !== false; // Default to true if not specified
+                            return (
+                              <Card key={id} className={`border-border/50 ${!isEnabled ? 'opacity-60' : ''}`}>
+                                <CardContent className="p-3">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex items-center space-x-3">
+                                      <Switch
+                                        id={`remote-mcp-enabled-${id}`}
+                                        checked={isEnabled}
+                                        onChange={(e) => handleRemoteMcpServerToggle(id, e.target.checked)}
+                                      />
+                                      <div className="flex-1 space-y-1">
+                                        <div className="flex items-center space-x-2">
+                                          <Badge variant="secondary" className="text-xs">{config.serverLabel || id}</Badge>
+                                          {config.requireApproval === 'always' && (
+                                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
+                                              Approval required
+                                            </Badge>
+                                          )}
+                                          {!isEnabled && (
+                                            <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500">
+                                              Disabled
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="text-xs text-muted-foreground font-mono truncate max-w-[300px]">
+                                          {config.serverUrl}
+                                        </div>
+                                        
+                                        {config.serverDescription && (
+                                          <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                                            {config.serverDescription}
+                                          </div>
+                                        )}
+                                        
+                                        {config.headers && Object.keys(config.headers).length > 0 && (
+                                          <div className="text-xs text-muted-foreground">
+                                            <span>{Object.keys(config.headers).length} custom header(s)</span>
+                                          </div>
+                                        )}
+                                        
+                                        {config.allowedTools && config.allowedTools.length > 0 && (
+                                          <div className="text-xs text-muted-foreground">
+                                            <span>Allowed tools: {config.allowedTools.join(', ')}</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                     
-                                    <div className="text-xs text-muted-foreground font-mono truncate max-w-[300px]">
-                                      {config.serverUrl}
+                                    <div className="flex space-x-1 ml-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={() => startRemoteMcpEditing(id)}
+                                      >
+                                        <Edit3 className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                        onClick={() => removeRemoteMcpServer(id)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
                                     </div>
-                                    
-                                    {config.serverDescription && (
-                                      <div className="text-xs text-muted-foreground truncate max-w-[300px]">
-                                        {config.serverDescription}
-                                      </div>
-                                    )}
-                                    
-                                    {config.headers && Object.keys(config.headers).length > 0 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        <span>{Object.keys(config.headers).length} custom header(s)</span>
-                                      </div>
-                                    )}
-                                    
-                                    {config.allowedTools && config.allowedTools.length > 0 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        <span>Allowed tools: {config.allowedTools.join(', ')}</span>
-                                      </div>
-                                    )}
                                   </div>
-                                  
-                                  <div className="flex space-x-1 ml-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 w-7 p-0"
-                                      onClick={() => startRemoteMcpEditing(id)}
-                                    >
-                                      <Edit3 className="h-3 w-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                                      onClick={() => removeRemoteMcpServer(id)}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
                         </div>
                       )}
 

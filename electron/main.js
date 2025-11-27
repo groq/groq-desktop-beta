@@ -40,6 +40,9 @@ const authManager = require('./authManager');
 const ContextCapture = require('./contextCapture');
 const PopupWindowManager = require('./popupWindow');
 
+// Import chat history manager
+const chatHistoryManager = require('./chatHistoryManager');
+
 // Global variable to hold the main window instance
 let mainWindow;
 
@@ -274,6 +277,11 @@ app.whenReady().then(async () => {
 
   // Initialize settings handlers (needs app)
   initializeSettingsHandlers(ipcMain, app);
+
+  // Initialize chat history manager
+  chatHistoryManager.initialize(app, loadSettings);
+  chatHistoryManager.initializeChatHistoryHandlers(ipcMain);
+  console.log("[Main Init] Chat history manager initialized");
 
   // Initialize MCP handlers (use module object)
   mcpManager.initializeMcpHandlers(ipcMain, app, mainWindow, loadSettings, resolveCommandPath);

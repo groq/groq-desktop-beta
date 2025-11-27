@@ -87,8 +87,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   const bubbleStyle = isUser ? 'bg-[#E9E9DF]' : ''; // No background for assistant/system
   const bubbleClasses = isUser
     ? `relative overflow-x-auto px-4 py-3 rounded-lg max-w-xl max-h-[500px] overflow-y-auto cursor-pointer ${bubbleStyle}`
-    : `relative overflow-x-auto w-full`; // Assistant bubbles full-width, no background
-  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-black' : 'text-black'} break-words text-sm`; // Keep text white for both, use break-words, smaller font
+    : `relative w-full`; // Assistant bubbles full-width, no background, text wraps naturally
+  const wrapperClasses = `message-content-wrapper ${isUser ? 'text-black' : 'text-black'} break-words text-sm overflow-hidden`; // Keep text black for both, use break-words, smaller font, contain overflow
 
   const toggleReasoning = () => setShowReasoning(!showReasoning);
   const toggleExecutedTools = () => setShowExecutedTools(!showExecutedTools);
