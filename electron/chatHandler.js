@@ -1168,6 +1168,21 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                                 } else if (data.status) {
                                     accumulatedData.apiStatus = data.status;
                                 }
+                                // Capture usage data from response.completed event
+                                if (data.response?.usage) {
+                                    const usage = data.response.usage;
+                                    const metrics = data.response.groq?.metrics || data.response.metadata;
+                                    // Calculate completion_time from metrics if available
+                                    const completionTime = metrics?.completion_time 
+                                        ? parseFloat(metrics.completion_time) 
+                                        : null;
+                                    accumulatedData.usage = {
+                                        total_tokens: usage.total_tokens,
+                                        prompt_tokens: usage.input_tokens,
+                                        completion_tokens: usage.output_tokens,
+                                        completion_time: completionTime
+                                    };
+                                }
                                 break;
 
                             case 'response.output_item.done':
@@ -1328,16 +1343,17 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      finishReason = "tool_calls";
                  }
 
-                 event.sender.send('chat-stream-complete', {
-                     content: accumulatedContent,
-                     role: "assistant",
-                     finish_reason: finishReason,
-                     tool_calls: toolCallsMap.size > 0 ? Array.from(toolCallsMap.values()) : undefined,
-                     pre_calculated_tool_responses: toolResponses.length > 0 ? toolResponses : undefined,
-                     executed_tools: executedTools.length > 0 ? executedTools : undefined,
-                     reasoning: accumulatedReasoning || undefined,
-                     mcp_approval_requests: accumulatedData.mcpApprovalRequests || undefined
-                 });
+                event.sender.send('chat-stream-complete', {
+                    content: accumulatedContent,
+                    role: "assistant",
+                    finish_reason: finishReason,
+                    tool_calls: toolCallsMap.size > 0 ? Array.from(toolCallsMap.values()) : undefined,
+                    pre_calculated_tool_responses: toolResponses.length > 0 ? toolResponses : undefined,
+                    executed_tools: executedTools.length > 0 ? executedTools : undefined,
+                    reasoning: accumulatedReasoning || undefined,
+                    mcp_approval_requests: accumulatedData.mcpApprovalRequests || undefined,
+                    usage: accumulatedData.usage || undefined
+                });
                  cleanupStream(streamId);
              }
         });

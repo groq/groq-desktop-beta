@@ -52,7 +52,7 @@ function ToolCall({ toolCall, toolResult }) {
   const isPending = toolResult === null || toolResult === undefined;
 
   return (
-    <div className="tool-call-container mt-2 w-fit max-w-full">
+    <div className="tool-call-container w-fit max-w-full">
       <div className="border border-gray-700 rounded-lg p-2 shadow-sm">
         <div 
           className="flex justify-between items-center cursor-pointer"

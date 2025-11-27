@@ -142,7 +142,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
         {/* Simple dropdowns - always visible when content exists */}
         {/* Hide reasoning UI for non-first messages in consecutive assistant message groups (MCP approval continuation flows) */}
         {!isUser && (hasReasoning || hasExecutedTools || hasReasoningSummaries) && (
-          <div className="pb-5 space-y-2">
+          <div className="pb-1 space-y-0.5">
             <div className="flex flex-wrap gap-2">
               {/* Reasoning summaries - displayed as activity lines while streaming AND reasoning not yet complete */}
               {/* Hide shimmer if content has started streaming, even if reasoningDuration not set yet */}
@@ -369,7 +369,7 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
           // Filter out remote MCP tools - they have server_label set
           const clientSideToolCalls = tool_calls.filter(tc => !tc.server_label);
           return clientSideToolCalls.length > 0 ? (
-            <div className="mb-4">
+            <div className="mb-2 space-y-0.5">
               {clientSideToolCalls.map((toolCall, index) => (
                 <ToolCall 
                   key={toolCall.id || index} 
@@ -384,13 +384,13 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
         {/* Usage stats, copy, and reload button for the last assistant message only */}
         {!isUser && showActions && (
           <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
-            {usage?.total_tokens && usage?.total_time && (
+            {usage?.completion_tokens && usage?.completion_time && (
               <div className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 370 563" fill="#F43E01" xmlns="http://www.w3.org/2000/svg">
                   <path d="M165.98 342.21H0L272.4 1.5l-68.75 220.11H369.6L97.23 562.32z"/>
                 </svg>
                 <span className="font-medium">
-                  {Math.round(usage.total_tokens / usage.total_time)} t/s
+                  {Math.round(usage.completion_tokens / usage.completion_time)} t/s
                 </span>
               </div>
             )}

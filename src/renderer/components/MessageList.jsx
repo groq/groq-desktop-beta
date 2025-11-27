@@ -122,7 +122,7 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage, on
   }, [displayMessages]);
 
   return (
-    <div className="space-y-2 pt-4 p-4">
+    <div className="space-y-0.5 pt-4 p-4">
       {displayMessages.map((message, index) => {
         // Find the original index in the messages array (including tool messages)
         const originalIndex = messages.findIndex((m, i) => {
