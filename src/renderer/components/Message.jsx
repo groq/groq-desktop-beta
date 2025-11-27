@@ -3,7 +3,7 @@ import ToolCall from './ToolCall';
 import MarkdownRenderer from './MarkdownRenderer';
 import { TextShimmer } from './ui/text-shimmer';
 
-function Message({ message, children, onToolCallExecute, allMessages, isLastMessage, messageIndex, onReloadFromMessage, loading, onActionsVisible }) {
+function Message({ message, children, onToolCallExecute, allMessages, isLastMessage, messageIndex, onReloadFromMessage, loading, onActionsVisible, hideReasoningUI = false, combinedReasoning = null, combinedReasoningDuration = null }) {
   const { role, tool_calls, reasoning, isStreaming, executed_tools, liveReasoning, liveExecutedTools, reasoningSummaries, reasoningDuration, usage } = message;
   const [showReasoning, setShowReasoning] = useState(false);
   const [showExecutedTools, setShowExecutedTools] = useState(false);
@@ -14,16 +14,21 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
   const actionTimeoutRef = useRef(null);
   
   const isUser = role === 'user';
-  const hasReasoning = (reasoning || liveReasoning) && !isUser;
+  const hasReasoning = (reasoning || liveReasoning || combinedReasoning) && !isUser;
   const hasExecutedTools = (executed_tools?.length > 0 || liveExecutedTools?.length > 0) && !isUser;
   const isStreamingMessage = isStreaming === true;
   const hasReasoningSummaries = reasoningSummaries && reasoningSummaries.length > 0;
-  // Reasoning is complete if we have a duration (even while still streaming) OR if stream ended with reasoning
-  const isReasoningComplete = (reasoningDuration && hasReasoning) || (!isStreamingMessage && hasReasoning);
   
   // Get current reasoning and tools (live or final)
-  const currentReasoning = liveReasoning || reasoning;
+  // Use combined reasoning from grouped messages if available (for MCP approval continuation flows)
+  const currentReasoning = combinedReasoning || liveReasoning || reasoning;
   const currentTools = liveExecutedTools?.length > 0 ? liveExecutedTools : executed_tools;
+  // Use combined duration if available
+  const effectiveReasoningDuration = combinedReasoningDuration || reasoningDuration;
+  
+  // Reasoning is complete if we have a duration (even while still streaming) OR if stream ended with reasoning
+  // Use effective duration which may include combined duration from grouped messages
+  const isReasoningComplete = (effectiveReasoningDuration && hasReasoning) || (!isStreamingMessage && hasReasoning);
   
   // Auto-collapse when streaming finishes
   useEffect(() => {
@@ -133,13 +138,15 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
         )}
 
         {/* Simple dropdowns - always visible when content exists */}
+        {/* Hide reasoning UI for non-first messages in consecutive assistant message groups (MCP approval continuation flows) */}
         {!isUser && (hasReasoning || hasExecutedTools || hasReasoningSummaries) && (
           <div className="pb-5 space-y-2">
             <div className="flex flex-wrap gap-2">
               {/* Reasoning summaries - displayed as activity lines while streaming AND reasoning not yet complete */}
               {/* Hide shimmer if content has started streaming, even if reasoningDuration not set yet */}
               {/* Only show the most recent summary to avoid multiple shimmering texts */}
-              {hasReasoningSummaries && isStreamingMessage && !reasoningDuration && !message.content && (
+              {/* Hide if this is a continuation message in an MCP approval flow */}
+              {!hideReasoningUI && hasReasoningSummaries && isStreamingMessage && !effectiveReasoningDuration && !message.content && (
                 <div className="flex flex-col gap-1.5 w-full mb-2">
                   {(() => {
                     const latestSummary = reasoningSummaries[reasoningSummaries.length - 1];
@@ -163,12 +170,13 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
               )}
               
               {/* When reasoning completes, show "Thought for Xs" toggle (can happen while still streaming content) */}
-              {hasReasoningSummaries && isReasoningComplete && reasoningDuration != null && (
+              {/* Hide if this is a continuation message in an MCP approval flow */}
+              {!hideReasoningUI && hasReasoningSummaries && isReasoningComplete && effectiveReasoningDuration != null && (
                 <button 
                   onClick={toggleReasoning}
                   className="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors duration-200 cursor-pointer bg-transparent border-none p-0"
                 >
-                  <span>Thought for {reasoningDuration}s</span>
+                  <span>Thought for {effectiveReasoningDuration}s</span>
                   <svg 
                     xmlns="http://www.w3.org/2000/svg" 
                     className={`h-3 w-3 ml-1 transition-transform duration-200 ${showReasoning ? 'rotate-90' : ''}`} 
@@ -183,7 +191,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
               )}
               
               {/* Reasoning dropdown - blue (only show if no summaries, for backward compatibility) */}
-              {hasReasoning && !hasReasoningSummaries && (
+              {/* Hide if this is a continuation message in an MCP approval flow */}
+              {!hideReasoningUI && hasReasoning && !hasReasoningSummaries && (
                 <button 
                   onClick={toggleReasoning}
                   className="flex items-center text-sm px-3 py-1 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-800 transition-colors duration-200"
@@ -236,7 +245,8 @@ function Message({ message, children, onToolCallExecute, allMessages, isLastMess
             </div>
             
             {/* Reasoning content - only show when toggled (not during streaming if we have summaries) */}
-            {showReasoning && currentReasoning && (
+            {/* Hide if this is a continuation message in an MCP approval flow */}
+            {!hideReasoningUI && showReasoning && currentReasoning && (
               <div 
                 className="mt-2 text-md transition-all duration-200 max-h-[600px] overflow-y-auto reasoning-content"
               >

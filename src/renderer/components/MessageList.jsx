@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Message from './Message';
 import MarkdownRenderer from './MarkdownRenderer';
 
@@ -38,6 +38,89 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage, on
   // assistant messages and their corresponding tool calls/results.
   const displayMessages = messages.filter(message => message.role !== 'tool');
 
+  // Identify consecutive assistant message groups (for collapsing reasoning in tool-call continuation flows)
+  // When using Responses API with MCP approval, we get multiple assistant messages without user messages between them
+  // We want to show reasoning UI only on the first message of such a group, but combine all reasoning
+  const assistantGroupInfo = useMemo(() => {
+    const groupInfo = new Map(); // Maps display index to { isFirstInGroup, groupStartIndex, groupSize, combinedReasoning, combinedDuration }
+    
+    // First pass: identify groups
+    const groups = []; // Array of { startIndex, endIndex, indices }
+    let currentGroupStart = null;
+    let currentGroupIndices = [];
+    
+    displayMessages.forEach((message, index) => {
+      if (message.role === 'assistant') {
+        if (currentGroupStart === null) {
+          currentGroupStart = index;
+          currentGroupIndices = [index];
+        } else {
+          currentGroupIndices.push(index);
+        }
+      } else {
+        // Non-assistant message ends the current group
+        if (currentGroupStart !== null && currentGroupIndices.length > 1) {
+          groups.push({
+            startIndex: currentGroupStart,
+            endIndex: currentGroupIndices[currentGroupIndices.length - 1],
+            indices: [...currentGroupIndices]
+          });
+        }
+        currentGroupStart = null;
+        currentGroupIndices = [];
+      }
+    });
+    
+    // Handle the case where the last messages are assistants
+    if (currentGroupStart !== null && currentGroupIndices.length > 1) {
+      groups.push({
+        startIndex: currentGroupStart,
+        endIndex: currentGroupIndices[currentGroupIndices.length - 1],
+        indices: [...currentGroupIndices]
+      });
+    }
+    
+    // Second pass: calculate combined reasoning for each group
+    groups.forEach(group => {
+      // Combine reasoning from all messages in the group
+      const reasoningParts = [];
+      let totalDuration = 0;
+      let hasAnyReasoning = false;
+      
+      group.indices.forEach((idx, positionInGroup) => {
+        const msg = displayMessages[idx];
+        const reasoning = msg.liveReasoning || msg.reasoning;
+        const duration = msg.reasoningDuration || 0;
+        
+        if (reasoning) {
+          hasAnyReasoning = true;
+          // Add a separator between reasoning sections if not the first
+          if (reasoningParts.length > 0) {
+            reasoningParts.push('\n\n---\n\n');
+          }
+          reasoningParts.push(reasoning);
+        }
+        totalDuration += duration;
+      });
+      
+      const combinedReasoning = hasAnyReasoning ? reasoningParts.join('') : null;
+      
+      // Store info for each message in the group
+      group.indices.forEach((idx, positionInGroup) => {
+        groupInfo.set(idx, {
+          isFirstInGroup: positionInGroup === 0,
+          groupStartIndex: group.startIndex,
+          groupSize: group.indices.length,
+          // Only the first message gets the combined reasoning
+          combinedReasoning: positionInGroup === 0 ? combinedReasoning : null,
+          combinedDuration: positionInGroup === 0 ? totalDuration : null
+        });
+      });
+    });
+    
+    return groupInfo;
+  }, [displayMessages]);
+
   return (
     <div className="space-y-2 pt-4 p-4">
       {displayMessages.map((message, index) => {
@@ -55,6 +138,15 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage, on
           }
           return false;
         });
+
+        // Get group info for consecutive assistant messages
+        // If this is not the first in a group of consecutive assistant messages, 
+        // we want to hide its reasoning UI to collapse it with the first message
+        const groupInfo = assistantGroupInfo.get(index);
+        const hideReasoningUI = groupInfo && !groupInfo.isFirstInGroup && groupInfo.groupSize > 1;
+        // For the first message in a group, pass combined reasoning from all grouped messages
+        const combinedReasoning = groupInfo?.combinedReasoning || null;
+        const combinedReasoningDuration = groupInfo?.combinedDuration || null;
         
         return (
           <Message 
@@ -67,6 +159,9 @@ function MessageList({ messages = [], onToolCallExecute, onRemoveLastMessage, on
             isLastMessage={index === displayMessages.length - 1}
             loading={loading}
             onActionsVisible={onActionsVisible}
+            hideReasoningUI={hideReasoningUI}
+            combinedReasoning={combinedReasoning}
+            combinedReasoningDuration={combinedReasoningDuration}
           >
           {message.role === 'user' ? (
             <div className="flex items-start gap-2">
