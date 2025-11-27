@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useChat } from '../context/ChatContext';
 import { Button } from './ui/button';
 import { 
@@ -10,6 +10,13 @@ import {
   MoreVertical,
   Clock
 } from 'lucide-react';
+
+// LocalStorage key for sidebar width
+const SIDEBAR_WIDTH_KEY = 'chat_sidebar_width';
+const MIN_SIDEBAR_WIDTH = 200;
+const MAX_SIDEBAR_WIDTH = 480;
+const DEFAULT_SIDEBAR_WIDTH = 256; // w-64 = 16rem = 256px
+const COLLAPSED_WIDTH = 64; // w-16 = 4rem = 64px
 
 // Format relative time for chat items
 function formatRelativeTime(dateString) {
@@ -79,6 +86,56 @@ function ChatHistorySidebar({ onNewChat, onChatLoaded, loading }) {
   const [deletingChatId, setDeletingChatId] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuButtonRefs = useRef({});
+
+  // Resize state
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    return savedWidth ? parseInt(savedWidth, 10) : DEFAULT_SIDEBAR_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef(null);
+
+  // Handle mouse move during resize
+  const handleMouseMove = useCallback((e) => {
+    if (!isResizing) return;
+    
+    const newWidth = e.clientX;
+    const clampedWidth = Math.min(Math.max(newWidth, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
+    setSidebarWidth(clampedWidth);
+  }, [isResizing]);
+
+  // Handle mouse up to stop resizing
+  const handleMouseUp = useCallback(() => {
+    if (isResizing) {
+      setIsResizing(false);
+      // Save to localStorage
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
+    }
+  }, [isResizing, sidebarWidth]);
+
+  // Start resizing
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  // Add/remove event listeners for resize
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      // Prevent text selection during resize
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const handleChatClick = async (chatId) => {
     if (loading) return; // Don't switch chats while loading
@@ -209,12 +266,30 @@ function ChatHistorySidebar({ onNewChat, onChatLoaded, loading }) {
 
   return (
     <div 
+      ref={sidebarRef}
       className={`
-        flex flex-col h-full bg-background border-r border-border
-        transition-all duration-300 ease-in-out
-        ${isSidebarCollapsed ? 'w-16' : 'w-64'}
+        flex flex-col h-full bg-background border-r border-border relative
+        ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}
       `}
+      style={{ 
+        width: isSidebarCollapsed ? COLLAPSED_WIDTH : sidebarWidth,
+        minWidth: isSidebarCollapsed ? COLLAPSED_WIDTH : MIN_SIDEBAR_WIDTH,
+        maxWidth: isSidebarCollapsed ? COLLAPSED_WIDTH : MAX_SIDEBAR_WIDTH
+      }}
     >
+      {/* Resize handle - only show when not collapsed */}
+      {!isSidebarCollapsed && (
+        <div
+          className={`
+            absolute top-0 right-0 w-1 h-full cursor-col-resize z-10
+            hover:bg-primary/30 active:bg-primary/50
+            ${isResizing ? 'bg-primary/50' : 'bg-transparent'}
+            transition-colors duration-150
+          `}
+          onMouseDown={handleResizeStart}
+          title="Drag to resize"
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-border">
         {!isSidebarCollapsed && (
