@@ -136,6 +136,13 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('mcp-auth-reconnect-complete', listener);
   },
 
+  // Google OAuth
+  googleOAuth: {
+    refresh: () => ipcRenderer.invoke('google-oauth-refresh'),
+    getStatus: () => ipcRenderer.invoke('google-oauth-status'),
+    validate: () => ipcRenderer.invoke('google-oauth-validate'),
+  },
+
   // --- Context Sharing Functions (Legacy - for URL/CLI context) ---
   getPendingContext: () => ipcRenderer.invoke('get-pending-context'),
   clearContext: () => ipcRenderer.invoke('clear-context'),

@@ -2,6 +2,7 @@ const Groq = require('groq-sdk');
 const fetch = require('node-fetch');
 const { pruneMessageHistory } = require('./messageUtils');
 const { supportsBuiltInTools } = require('../shared/models');
+const googleOAuthManager = require('./googleOAuthManager');
 
 // Track active streams to allow cancellation
 const activeStreams = new Map();
@@ -762,44 +763,63 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
         validateApiKey(settings);
         const { modelToUse } = determineModel(model, settings, modelContextSizes);
 
+        // Check if we need to refresh Google OAuth token before using connectors
+        let currentSettings = settings;
+        const hasGoogleConnectors = settings.googleConnectors?.gmail || 
+                                    settings.googleConnectors?.calendar || 
+                                    settings.googleConnectors?.drive;
+        
+        if (hasGoogleConnectors) {
+            try {
+                const { token, settings: updatedSettings } = await googleOAuthManager.getValidAccessToken(settings);
+                if (updatedSettings !== settings) {
+                    currentSettings = updatedSettings;
+                    console.log('[ChatHandler] Google OAuth token was refreshed');
+                }
+            } catch (error) {
+                console.error('[ChatHandler] Error refreshing Google OAuth token:', error);
+                // Continue with existing token
+            }
+        }
+
         // Prepare Connectors
         const tools = [];
         const remotePrefixes = new Set();
         
-        if (settings.googleConnectors?.gmail && settings.googleOAuthToken) {
+        if (currentSettings.googleConnectors?.gmail && currentSettings.googleOAuthToken) {
             remotePrefixes.add("gmail");
             tools.push({
                 type: "mcp",
                 server_label: "gmail",
                 connector_id: "connector_gmail",
-                authorization: settings.googleOAuthToken,
-                require_approval: settings.googleConnectorsApproval?.gmail || "never"
+                authorization: currentSettings.googleOAuthToken,
+                require_approval: currentSettings.googleConnectorsApproval?.gmail || "never"
             });
         }
-        if (settings.googleConnectors?.calendar && settings.googleOAuthToken) {
+        if (currentSettings.googleConnectors?.calendar && currentSettings.googleOAuthToken) {
             remotePrefixes.add("google_calendar");
             tools.push({
                 type: "mcp",
                 server_label: "google_calendar",
                 connector_id: "connector_googlecalendar",
-                authorization: settings.googleOAuthToken,
-                require_approval: settings.googleConnectorsApproval?.calendar || "never"
+                authorization: currentSettings.googleOAuthToken,
+                require_approval: currentSettings.googleConnectorsApproval?.calendar || "never"
             });
         }
-        if (settings.googleConnectors?.drive && settings.googleOAuthToken) {
+        if (currentSettings.googleConnectors?.drive && currentSettings.googleOAuthToken) {
             remotePrefixes.add("google_drive");
             tools.push({
                 type: "mcp",
                 server_label: "google_drive",
                 connector_id: "connector_googledrive",
-                authorization: settings.googleOAuthToken,
-                require_approval: settings.googleConnectorsApproval?.drive || "never"
+                authorization: currentSettings.googleOAuthToken,
+                require_approval: currentSettings.googleConnectorsApproval?.drive || "never"
             });
         }
 
         // Add Remote MCP Servers
-        if (settings.remoteMcpServers && typeof settings.remoteMcpServers === 'object') {
-            for (const [serverId, serverConfig] of Object.entries(settings.remoteMcpServers)) {
+        if (currentSettings.remoteMcpServers && typeof currentSettings.remoteMcpServers === 'object') {
+            for (const [serverId, serverConfig] of Object.entries(currentSettings.remoteMcpServers)) {
                 // Skip disabled servers (enabled defaults to true if not specified)
                 if (serverConfig.enabled === false) {
                     console.log(`[ChatHandler] Remote MCP server ${serverId} is disabled, skipping`);

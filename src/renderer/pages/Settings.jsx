@@ -36,8 +36,14 @@ function Settings() {
     googleConnectors: { gmail: false, calendar: false, drive: false },
     googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
     googleOAuthToken: '',
+    googleRefreshToken: '',
+    googleClientId: '',
+    googleClientSecret: '',
+    googleTokenExpiresAt: null,
     remoteMcpServers: {}
   });
+  const [googleOAuthStatus, setGoogleOAuthStatus] = useState(null);
+  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -125,10 +131,27 @@ function Settings() {
         if (!settingsData.googleOAuthToken) {
             settingsData.googleOAuthToken = '';
         }
+        if (!settingsData.googleRefreshToken) {
+            settingsData.googleRefreshToken = '';
+        }
+        if (!settingsData.googleClientId) {
+            settingsData.googleClientId = '';
+        }
+        if (!settingsData.googleClientSecret) {
+            settingsData.googleClientSecret = '';
+        }
         if (!settingsData.remoteMcpServers) {
             settingsData.remoteMcpServers = {};
         }
         setSettings(settingsData);
+        
+        // Fetch Google OAuth status
+        try {
+          const status = await window.electron.googleOAuth.getStatus();
+          setGoogleOAuthStatus(status);
+        } catch (e) {
+          console.error('Error fetching Google OAuth status:', e);
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
         setSettings(prev => ({
@@ -157,6 +180,10 @@ function Settings() {
             googleConnectors: { gmail: false, calendar: false, drive: false },
             googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
             googleOAuthToken: '',
+            googleRefreshToken: '',
+            googleClientId: '',
+            googleClientSecret: '',
+            googleTokenExpiresAt: null,
             remoteMcpServers: {}
         }));
       }
@@ -269,6 +296,36 @@ function Settings() {
     };
     setSettings(updatedSettings);
     saveSettings(updatedSettings);
+  };
+
+  const handleGoogleOAuthRefresh = async () => {
+    setIsRefreshingToken(true);
+    try {
+      const result = await window.electron.googleOAuth.refresh();
+      if (result.success) {
+        // Reload settings to get the new token
+        const newSettings = await window.electron.getSettings();
+        setSettings(prev => ({
+          ...prev,
+          googleOAuthToken: newSettings.googleOAuthToken,
+          googleTokenExpiresAt: newSettings.googleTokenExpiresAt
+        }));
+        // Update status
+        const status = await window.electron.googleOAuth.getStatus();
+        setGoogleOAuthStatus(status);
+        setSaveStatus({ type: 'success', message: 'Token refreshed successfully!' });
+      } else {
+        setSaveStatus({ type: 'error', message: result.message || 'Failed to refresh token' });
+      }
+    } catch (error) {
+      console.error('Error refreshing Google OAuth token:', error);
+      setSaveStatus({ type: 'error', message: 'Error refreshing token' });
+    } finally {
+      setIsRefreshingToken(false);
+      // Clear status after 3 seconds
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+      statusTimeoutRef.current = setTimeout(() => setSaveStatus(null), 3000);
+    }
   };
 
   const handleNumberChange = (e) => {
@@ -1206,30 +1263,137 @@ function Settings() {
 
                 {settings.useResponsesApi && (
                   <div className="space-y-4 pl-4 border-l-2 border-muted ml-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="google-oauth-token">Google OAuth Token</Label>
-                      <Input
-                        type="password"
-                        id="google-oauth-token"
-                        name="googleOAuthToken"
-                        value={settings.googleOAuthToken || ''}
-                        onChange={handleChange}
-                        placeholder="Enter your Google OAuth Access Token"
-                      />
+                    {/* Google OAuth Credentials Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Google OAuth Credentials</Label>
+                        {googleOAuthStatus?.hasRefreshCapability && (
+                          <div className="flex items-center gap-2">
+                            {googleOAuthStatus?.expiresInMinutes !== null && (
+                              <span className={`text-xs ${googleOAuthStatus.isExpired ? 'text-red-500' : googleOAuthStatus.expiresInMinutes < 10 ? 'text-yellow-500' : 'text-green-500'}`}>
+                                {googleOAuthStatus.isExpired 
+                                  ? 'Token expired' 
+                                  : `Expires in ${googleOAuthStatus.expiresInMinutes} min`}
+                              </span>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleGoogleOAuthRefresh}
+                              disabled={isRefreshingToken}
+                              className="h-7 text-xs"
+                            >
+                              {isRefreshingToken ? 'Refreshing...' : 'Refresh Token'}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Refresh Token */}
+                      <div className="space-y-2">
+                        <Label htmlFor="google-refresh-token" className="text-xs text-muted-foreground">
+                          Refresh Token (permanent - enables auto-refresh)
+                        </Label>
+                        <Input
+                          type="password"
+                          id="google-refresh-token"
+                          name="googleRefreshToken"
+                          value={settings.googleRefreshToken || ''}
+                          onChange={handleChange}
+                          placeholder="1//0xxxxx... (from OAuth flow)"
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      {/* Client ID & Secret */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="google-client-id" className="text-xs text-muted-foreground">
+                            Client ID
+                          </Label>
+                          <Input
+                            type="password"
+                            id="google-client-id"
+                            name="googleClientId"
+                            value={settings.googleClientId || ''}
+                            onChange={handleChange}
+                            placeholder="xxxxx.apps.googleusercontent.com"
+                            className="font-mono text-sm"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="google-client-secret" className="text-xs text-muted-foreground">
+                            Client Secret
+                          </Label>
+                          <Input
+                            type="password"
+                            id="google-client-secret"
+                            name="googleClientSecret"
+                            value={settings.googleClientSecret || ''}
+                            onChange={handleChange}
+                            placeholder="GOCSPX-xxxxx"
+                            className="font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Help Link */}
                       <p className="text-xs text-muted-foreground">
-                        Required for Gmail, Calendar, and Drive connectors.
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        💡 Tip: You can generate a temporary OAuth key at{' '}
+                        📖 Need help?{' '}
                         <a 
-                          href="https://developers.google.com/oauthplayground/" 
+                          href="https://console.cloud.google.com/apis/credentials" 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="text-primary hover:underline"
                         >
-                          https://developers.google.com/oauthplayground/
+                          Create OAuth credentials
                         </a>
+                        {' '}→ Create Credentials → OAuth client ID → Desktop app
                       </p>
+
+                      {/* Status Message */}
+                      {settings.googleRefreshToken && settings.googleClientId && settings.googleClientSecret ? (
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          ✓ Auto-refresh enabled - tokens will be refreshed automatically when they expire
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Enter refresh token + client credentials to enable automatic token refresh.
+                          Or enter just an access token below (will expire in ~1 hour).
+                        </p>
+                      )}
+
+                      {/* Manual Access Token (fallback) */}
+                      <details className="pt-2">
+                        <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                          Manual Access Token (advanced)
+                        </summary>
+                        <div className="space-y-2 pt-2">
+                          <Input
+                            type="password"
+                            id="google-oauth-token"
+                            name="googleOAuthToken"
+                            value={settings.googleOAuthToken || ''}
+                            onChange={handleChange}
+                            placeholder="ya29.xxxxx (expires in ~1 hour)"
+                            className="font-mono text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            This is auto-populated when using refresh token. Manual entry only needed if not using auto-refresh.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            💡 Generate a temporary token at{' '}
+                            <a 
+                              href="https://developers.google.com/oauthplayground/" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              OAuth Playground
+                            </a>
+                          </p>
+                        </div>
+                      </details>
                     </div>
 
                     <div className="space-y-4 pt-2">

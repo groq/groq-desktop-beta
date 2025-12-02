@@ -30,11 +30,12 @@ const chatHandler = require('./chatHandler');
 const toolHandler = require('./toolHandler');
 
 // Import new manager modules
-const { initializeSettingsHandlers, loadSettings } = require('./settingsManager');
+const { initializeSettingsHandlers, loadSettings, saveSettings } = require('./settingsManager');
 const { initializeCommandResolver, resolveCommandPath } = require('./commandResolver');
 const mcpManager = require('./mcpManager');
 const { initializeWindowManager } = require('./windowManager');
 const authManager = require('./authManager');
+const googleOAuthManager = require('./googleOAuthManager');
 
 // Import context capture system
 const ContextCapture = require('./contextCapture');
@@ -293,6 +294,26 @@ app.whenReady().then(async () => {
   } else {
        console.error("[Main] CRITICAL: mcpManager or retryConnectionAfterAuth not available for AuthManager initialization!");
   }
+
+  // Initialize Google OAuth Manager
+  console.log("[Main Init] Initializing Google OAuth Manager...");
+  googleOAuthManager.initialize(app, saveSettings);
+
+  // --- Google OAuth IPC Handlers --- //
+  ipcMain.handle('google-oauth-refresh', async () => {
+    console.log('[Main] Manual Google OAuth token refresh requested');
+    return googleOAuthManager.manualRefresh();
+  });
+
+  ipcMain.handle('google-oauth-status', async () => {
+    const currentSettings = loadSettings();
+    return googleOAuthManager.getTokenStatus(currentSettings);
+  });
+
+  ipcMain.handle('google-oauth-validate', async () => {
+    const currentSettings = loadSettings();
+    return googleOAuthManager.validateCredentials(currentSettings);
+  });
 
   // --- Register Core App IPC Handlers --- //
   // Chat completion (use module object)

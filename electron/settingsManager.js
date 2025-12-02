@@ -28,7 +28,11 @@ function loadSettings() {
             disableThinkingSummaries: false,
             useResponsesApi: false,
             googleConnectors: { gmail: false, calendar: false, drive: false },
-            googleOAuthToken: ""
+            googleOAuthToken: "",
+            googleRefreshToken: "",
+            googleClientId: "",
+            googleClientSecret: "",
+            googleTokenExpiresAt: null
         };
     }
     const userDataPath = appInstance.getPath('userData');
@@ -51,7 +55,11 @@ function loadSettings() {
         disableThinkingSummaries: false,
         useResponsesApi: false,
         googleConnectors: { gmail: false, calendar: false, drive: false },
-        googleOAuthToken: ""
+        googleOAuthToken: "",
+        googleRefreshToken: "",
+        googleClientId: "",
+        googleClientSecret: "",
+        googleTokenExpiresAt: null
     };
 
     try {
@@ -93,6 +101,10 @@ function loadSettings() {
             settings.useResponsesApi = settings.useResponsesApi ?? defaultSettings.useResponsesApi;
             settings.googleConnectors = settings.googleConnectors || defaultSettings.googleConnectors;
             settings.googleOAuthToken = settings.googleOAuthToken || defaultSettings.googleOAuthToken;
+            settings.googleRefreshToken = settings.googleRefreshToken || defaultSettings.googleRefreshToken;
+            settings.googleClientId = settings.googleClientId || defaultSettings.googleClientId;
+            settings.googleClientSecret = settings.googleClientSecret || defaultSettings.googleClientSecret;
+            settings.googleTokenExpiresAt = settings.googleTokenExpiresAt ?? defaultSettings.googleTokenExpiresAt;
 
             // Optional: Persist the potentially updated settings back to file if defaults were applied
             // fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
@@ -169,7 +181,34 @@ function initializeSettingsHandlers(ipcMain, app) {
     });
 }
 
+/**
+ * Save settings to disk (for use by other modules)
+ * @param {Object} settings - Settings object to save
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function saveSettings(settings) {
+    if (!appInstance) {
+        console.error("App instance not initialized in settingsManager.");
+        return { success: false, error: "App not initialized" };
+    }
+    
+    const userDataPath = appInstance.getPath('userData');
+    const settingsPath = path.join(userDataPath, 'settings.json');
+    
+    try {
+        if (!settings || typeof settings !== 'object') {
+            throw new Error("Invalid settings object provided.");
+        }
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        return { success: true };
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     loadSettings,
+    saveSettings,
     initializeSettingsHandlers
 }; 
