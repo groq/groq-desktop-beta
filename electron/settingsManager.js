@@ -27,6 +27,7 @@ function loadSettings() {
             customModels: {},
             disableThinkingSummaries: false,
             useResponsesApi: false,
+            logApiRequests: false,
             googleConnectors: { gmail: false, calendar: false, drive: false },
             googleOAuthToken: "",
             googleRefreshToken: "",
@@ -54,6 +55,7 @@ function loadSettings() {
         customModels: {},
         disableThinkingSummaries: false,
         useResponsesApi: false,
+        logApiRequests: false,
         googleConnectors: { gmail: false, calendar: false, drive: false },
         googleOAuthToken: "",
         googleRefreshToken: "",
@@ -99,6 +101,7 @@ function loadSettings() {
             settings.customModels = settings.customModels || defaultSettings.customModels;
             settings.disableThinkingSummaries = settings.disableThinkingSummaries ?? defaultSettings.disableThinkingSummaries;
             settings.useResponsesApi = settings.useResponsesApi ?? defaultSettings.useResponsesApi;
+            settings.logApiRequests = settings.logApiRequests ?? defaultSettings.logApiRequests;
             settings.googleConnectors = settings.googleConnectors || defaultSettings.googleConnectors;
             settings.googleOAuthToken = settings.googleOAuthToken || defaultSettings.googleOAuthToken;
             settings.googleRefreshToken = settings.googleRefreshToken || defaultSettings.googleRefreshToken;

@@ -1,5 +1,7 @@
 const Groq = require('groq-sdk');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 const { pruneMessageHistory } = require('./messageUtils');
 const { supportsBuiltInTools } = require('../shared/models');
 const googleOAuthManager = require('./googleOAuthManager');
@@ -116,6 +118,7 @@ function prepareTools(discoveredTools, isResponsesApi = false) {
                 type: "function",
                 name: tool.name || "unknown_tool",
                 description: tool.description || "",
+                strict: true,
                 parameters: safeSchema
             };
         } else {
@@ -125,6 +128,7 @@ function prepareTools(discoveredTools, isResponsesApi = false) {
                 function: {
                     name: tool.name || "unknown_tool",
                     description: tool.description || "",
+                    strict: true,
                     parameters: safeSchema
                 }
             };
@@ -556,6 +560,20 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 return;
             }
 
+            // Write request payload to /tmp if logging is enabled
+            let requestFilePath = null;
+            let responseFilePath = null;
+            let responseChunks = [];
+            if (settings.logApiRequests) {
+                const requestTimestamp = Date.now();
+                requestFilePath = path.join('/tmp', `chat-completion-request-${requestTimestamp}-${streamId}.json`);
+                fs.writeFileSync(requestFilePath, JSON.stringify(chatCompletionParams, null, 2));
+                console.log(`[ChatHandler] Request payload written to: ${requestFilePath}`);
+
+                // Create response file path
+                responseFilePath = path.join('/tmp', `chat-completion-response-${requestTimestamp}-${streamId}.json`);
+            }
+
             const stream = await groq.chat.completions.create(chatCompletionParams);
             
             // Store the stream iterator for potential cancellation
@@ -575,14 +593,29 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                             currentStreamInfo.summaryInterval = null;
                         }
                     }
+                    // Write accumulated response chunks before cancelling if logging is enabled
+                    if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                        fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                        console.log(`[ChatHandler] Response chunks written to: ${responseFilePath}`);
+                    }
                     event.sender.send('chat-stream-cancelled', { streamId });
                     cleanupStream(streamId);
                     return;
                 }
 
+                // Accumulate response chunks if logging is enabled
+                if (settings.logApiRequests) {
+                    responseChunks.push(chunk);
+                }
+
                 const finishReason = processStreamChunk(chunk, event, accumulatedData, groq, streamId, settings);
 
                 if (finishReason) {
+                    // Write final response chunks if logging is enabled
+                    if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                        fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                        console.log(`[ChatHandler] Response chunks written to: ${responseFilePath}`);
+                    }
                     handleStreamCompletion(event, accumulatedData, finishReason, streamId);
                     cleanupStream(streamId);
                     return;
@@ -597,6 +630,12 @@ async function executeStreamWithRetry(groq, chatCompletionParams, event, streamI
                 if (streamInfo) {
                     streamInfo.summaryInterval = null;
                 }
+            }
+            
+            // Write accumulated response chunks before error if logging is enabled
+            if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                console.log(`[ChatHandler] Response chunks written to: ${responseFilePath}`);
             }
             
             cleanupStream(streamId);
@@ -995,6 +1034,20 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
 
         const body = JSON.stringify(apiParams);
 
+        // Write request payload to /tmp if logging is enabled
+        let requestFilePath = null;
+        let responseFilePath = null;
+        let responseChunks = [];
+        if (settings.logApiRequests) {
+            const requestTimestamp = Date.now();
+            requestFilePath = path.join('/tmp', `responses-api-request-${requestTimestamp}-${streamId}.json`);
+            fs.writeFileSync(requestFilePath, JSON.stringify(apiParams, null, 2));
+            console.log(`[ChatHandler] Responses API request payload written to: ${requestFilePath}`);
+
+            // Create response file path
+            responseFilePath = path.join('/tmp', `responses-api-response-${requestTimestamp}-${streamId}.json`);
+        }
+
         const response = await fetch("https://api.groq.com/openai/v1/responses", {
             method: "POST",
             headers: {
@@ -1042,6 +1095,11 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
             if (activeStreams.get(streamId)?.cancelled) {
                 stream.destroy(); // Stop stream
                 return;
+            }
+            
+            // Accumulate raw chunk data if logging is enabled
+            if (settings.logApiRequests) {
+                responseChunks.push(chunk.toString());
             }
             
             buffer += chunk.toString();
@@ -1313,6 +1371,11 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                  if (accumulatedData.error || accumulatedData.failed) {
                      const errorMessage = accumulatedData.error || accumulatedData.failureReason || 'Response generation failed';
                      console.error('[Responses API] Stream ended with error:', errorMessage);
+                     // Write response chunks if logging is enabled and there are any
+                     if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                         fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                         console.log(`[ChatHandler] Responses API response chunks written to: ${responseFilePath}`);
+                     }
                      event.sender.send('chat-stream-error', { error: errorMessage });
                      cleanupStream(streamId);
                      return;
@@ -1363,6 +1426,12 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
                      finishReason = "tool_calls";
                  }
 
+                // Write response chunks if logging is enabled
+                if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                    fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                    console.log(`[ChatHandler] Responses API response chunks written to: ${responseFilePath}`);
+                }
+
                 event.sender.send('chat-stream-complete', {
                     content: accumulatedContent,
                     role: "assistant",
@@ -1380,6 +1449,11 @@ async function handleResponsesApiStream(event, messages, model, settings, modelC
         
         stream.on('error', (err) => {
              if (!activeStreams.get(streamId)?.cancelled) {
+                 // Write response chunks if logging is enabled and there are any
+                 if (settings.logApiRequests && responseFilePath && responseChunks.length > 0) {
+                     fs.writeFileSync(responseFilePath, JSON.stringify(responseChunks, null, 2));
+                     console.log(`[ChatHandler] Responses API response chunks written to: ${responseFilePath}`);
+                 }
                  event.sender.send('chat-stream-error', { error: err.message });
                  cleanupStream(streamId);
              }

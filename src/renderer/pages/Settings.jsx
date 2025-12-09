@@ -33,6 +33,7 @@ function Settings() {
     modelFilterExclude: '',
     disableThinkingSummaries: false,
     useResponsesApi: false,
+    logApiRequests: false,
     googleConnectors: { gmail: false, calendar: false, drive: false },
     googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
     googleOAuthToken: '',
@@ -122,6 +123,9 @@ function Settings() {
         if (settingsData.useResponsesApi === undefined) {
             settingsData.useResponsesApi = false;
         }
+        if (settingsData.logApiRequests === undefined) {
+            settingsData.logApiRequests = false;
+        }
         if (!settingsData.googleConnectors) {
             settingsData.googleConnectors = { gmail: false, calendar: false, drive: false };
         }
@@ -177,6 +181,7 @@ function Settings() {
             modelFilterExclude: '',
             disableThinkingSummaries: false,
             useResponsesApi: false,
+            logApiRequests: false,
             googleConnectors: { gmail: false, calendar: false, drive: false },
             googleConnectorsApproval: { gmail: 'never', calendar: 'never', drive: 'never' },
             googleOAuthToken: '',
@@ -1896,6 +1901,31 @@ function Settings() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   When enabled, thinking summaries will not be generated. Only the raw reasoning text will be displayed.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* API Request Logging */}
+            <Card>
+              <CardHeader>
+                <CardTitle>API Request Logging</CardTitle>
+                <CardDescription>
+                  Log API request payloads and responses to /tmp for debugging
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="log-api-requests" className="font-medium">
+                    Log API Requests
+                  </Label>
+                  <Switch
+                    id="log-api-requests"
+                    checked={settings.logApiRequests || false}
+                    onChange={(e) => handleToggleChange('logApiRequests', e.target.checked)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  When enabled, request payloads and response chunks will be written to /tmp with timestamps. File paths are logged to the console.
                 </p>
               </CardContent>
             </Card>
