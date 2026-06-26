@@ -1,7 +1,7 @@
 appId: com.groq.desktop
 productName: Groq Desktop
 artifactName: "${productName}-${version}.${ext}"
-copyright: "Copyright © 2025 Groq"
+copyright: "Copyright © 2026 Groq LLC"
 
 directories:
   buildResources: build
